@@ -31,7 +31,7 @@
       <h1 id="formTitle">Sign up for free</h1>
 
       <!-- Sign up form -->
-      <form id="signupForm" class="form" autocomplete="on" novalidate>
+  <form id="signupForm" class="form" autocomplete="on" novalidate action="http://localhost:8000/signup" method="post">
         <div>
           <label for="su-email" class="label">Email</label>
           <input type="email" id="su-email" name="email" placeholder="you@example.com" class="input" required />
@@ -103,9 +103,34 @@
       navLoginBtn.addEventListener('click', e => { e.preventDefault(); show('login'); });
 
       // Basic demo handlers
-      signupForm.addEventListener('submit', e => {
+      signupForm.addEventListener('submit', async e => {
         e.preventDefault();
-        alert('Sign up submitted');
+        const email = document.getElementById('su-email').value.trim();
+        const password = document.getElementById('su-password').value;
+        const submitBtn = signupForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing up...';
+        try {
+          const res = await fetch('http://localhost:8000/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const msg = (data && (data.message || data.error?.message)) || `Request failed (${res.status})`;
+            throw new Error(msg);
+          }
+          alert('Sign up successful');
+          // Optionally redirect or switch to login
+          // show('login');
+        } catch (err) {
+          alert('Sign up failed: ' + err.message);
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       });
       loginForm.addEventListener('submit', e => {
         e.preventDefault();
