@@ -1,0 +1,13 @@
+1. New Model Creation Pattern
+Following your current pattern, you'd create:
+
+Appointment model in models.py
+Foreign key relationships to existing tables
+Same SQLModel approach you're using
+2. Relationship Strategy
+Based on your current User ↔ Stylist pattern, appointments would likely:
+
+Belong to a Stylist: stylist_id foreign key to Stylist table
+Optionally belong to a Customer: customer_id foreign key (if you add Customer model later)
+Manual foreign key management (like you're doing now, not SQLModel relationships)
+3. Typical Appointment Fields
