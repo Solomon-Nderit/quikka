@@ -1,0 +1,1 @@
+# Makes 'app' a package. Useful for absolute/relative imports if running as a module.
