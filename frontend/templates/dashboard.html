@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Quikka</title>
+  <link rel="stylesheet" href="/frontend/templates/styles.css" />
+  <style>
+    /* Minimal navbar styling */
+    .navbar {
+      background: white;
+      border-bottom: 1px solid #e1e5e9;
+      padding: 0.5rem 0;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .navbar .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 1rem;
+    }
+    
+    .navbar .brand {
+      display: flex;
+      align-items: center;
+      text-decoration: none;
+      color: #333;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+    
+    .navbar .logo {
+      width: 32px;
+      height: 32px;
+      margin-right: 0.5rem;
+      object-fit: contain;
+    }
+    
+    .navbar .nav-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+    
+    .navbar .nav-links a {
+      text-decoration: none;
+      color: #666;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+    
+    .navbar .nav-links a:hover {
+      color: #333;
+    }
+    
+    .navbar .nav-cta {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    
+    /* Basic body and layout */
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #f8f9fa;
+      color: #333;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+    
+    .dashboard {
+      max-width: 1200px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    
+    .user-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+    
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    
+    .dashboard-card {
+      background: white;
+      border: 1px solid #e1e5e9;
+      border-radius: 8px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .dashboard-card h3 {
+      margin: 0 0 1rem 0;
+      color: #333;
+      font-size: 1.2rem;
+    }
+    
+    .dashboard-card p {
+      color: #666;
+      line-height: 1.5;
+      margin: 0;
+    }
+    
+    .feature-list {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0 0 0;
+    }
+    
+    .feature-list li {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #f0f0f0;
+      color: #555;
+    }
+    
+    .feature-list li:last-child {
+      border-bottom: none;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      color: #666;
+    }
+    
+    .error {
+      background: #fee;
+      border: 1px solid #fcc;
+      color: #c33;
+      padding: 1rem;
+      border-radius: 4px;
+      margin: 1rem 0;
+    }
+    
+    .logout-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    
+    .logout-btn:hover {
+      background: #c82333;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: #6c757d;
+      color: white;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .badge.stylist {
+      background: #28a745;
+    }
+    
+    .badge.admin {
+      background: #dc3545;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="container">
+      <a class="brand" href="/">
+        <img class="logo" src="/frontend/public/landing_page.png" alt="Quikka" />
+        <span>Quikka</span>
+      </a>
+      <div class="nav-links">
+        <a href="#profile">Profile</a>
+        <a href="#settings">Settings</a>
+        <a href="#help">Help</a>
+      </div>
+      <div class="nav-cta">
+        <button class="logout-btn" id="logoutBtn">Logout</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="dashboard">
+    <div id="loading" class="loading">
+      <p>Loading your dashboard...</p>
+    </div>
+    
+    <div id="error" class="error" style="display: none;">
+      <p>Failed to load dashboard. Please try again.</p>
+    </div>
+    
+    <div id="dashboardContent" style="display: none;">
+      <div class="dashboard-header">
+        <div class="user-info">
+          <div class="user-avatar" id="userAvatar">U</div>
+          <div>
+            <h2 id="welcomeMessage">Welcome back!</h2>
+            <p id="userEmail">user@example.com</p>
+          </div>
+        </div>
+        <div>
+          <span id="userRole" class="badge"></span>
+        </div>
+      </div>
+      
+      <div class="dashboard-grid">
+        <div class="dashboard-card">
+          <h3>Account Information</h3>
+          <p><strong>Name:</strong> <span id="userName">Loading...</span></p>
+          <p><strong>Email:</strong> <span id="userEmailInfo">Loading...</span></p>
+          <p><strong>Phone:</strong> <span id="userPhone">Not provided</span></p>
+          <p><strong>Role:</strong> <span id="userRoleInfo">Loading...</span></p>
+          <p><strong>Member since:</strong> <span id="memberSince">Loading...</span></p>
+        </div>
+        
+        <div class="dashboard-card">
+          <h3>Available Features</h3>
+          <ul class="feature-list" id="featureList">
+            <li>Loading features...</li>
+          </ul>
+        </div>
+        
+        <div class="dashboard-card" id="businessCard" style="display: none;">
+          <h3>Business Profile</h3>
+          <p><strong>Business Name:</strong> <span id="businessName">Loading...</span></p>
+          <p><strong>Bio:</strong></p>
+          <p id="businessBio">Loading...</p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function(){
+      // JWT Token Management (same as in auth page)
+      const TokenManager = {
+        setToken: function(token) {
+          localStorage.setItem('quikka_token', token);
+        },
+        getToken: function() {
+          return localStorage.getItem('quikka_token');
+        },
+        removeToken: function() {
+          localStorage.removeItem('quikka_token');
+        },
+        isAuthenticated: function() {
+          const token = this.getToken();
+          if (!token) return false;
+          
+          try {
+            // Basic JWT structure check
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const currentTime = Date.now() / 1000;
+            return payload.exp > currentTime;
+          } catch (error) {
+            console.error('Invalid token:', error);
+            this.removeToken();
+            return false;
+          }
+        }
+      };
+
+      // Check authentication on page load
+      if (!TokenManager.isAuthenticated()) {
+        alert('Please log in to access the dashboard');
+        window.location.href = '/auth';
+        return;
+      }
+
+      const loadingEl = document.getElementById('loading');
+      const errorEl = document.getElementById('error');
+      const contentEl = document.getElementById('dashboardContent');
+
+      // API request helper with authentication
+      async function authenticatedRequest(url) {
+        const token = TokenManager.getToken();
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.status === 401) {
+          // Token is invalid or expired
+          TokenManager.removeToken();
+          alert('Your session has expired. Please log in again.');
+          window.location.href = '/auth';
+          return;
+        }
+        
+        const responseData = await response.json().catch(() => ({}));
+        
+        if (!response.ok) {
+          const errorMessage = responseData.detail || responseData.message || `Request failed (${response.status})`;
+          throw new Error(errorMessage);
+        }
+        
+        return responseData;
+      }
+
+      // Load dashboard data
+      async function loadDashboard() {
+        try {
+          const data = await authenticatedRequest('http://localhost:8000/api/dashboard');
+          
+          // Hide loading, show content
+          loadingEl.style.display = 'none';
+          contentEl.style.display = 'block';
+          
+          // Update user information
+          const user = data.user;
+          document.getElementById('welcomeMessage').textContent = data.message;
+          document.getElementById('userAvatar').textContent = user.name.charAt(0).toUpperCase();
+          document.getElementById('userEmail').textContent = user.email;
+          document.getElementById('userName').textContent = user.name;
+          document.getElementById('userEmailInfo').textContent = user.email;
+          document.getElementById('userPhone').textContent = user.phone || 'Not provided';
+          document.getElementById('userRoleInfo').textContent = user.role;
+          document.getElementById('userRole').textContent = user.role.toUpperCase();
+          document.getElementById('userRole').className = `badge ${user.role}`;
+          
+          // Format creation date
+          if (user.created_at) {
+            const createdDate = new Date(user.created_at);
+            document.getElementById('memberSince').textContent = createdDate.toLocaleDateString();
+          }
+          
+          // Update feature list
+          const featureList = document.getElementById('featureList');
+          featureList.innerHTML = '';
+          if (data.dashboard_features && data.dashboard_features.length > 0) {
+            data.dashboard_features.forEach(feature => {
+              const li = document.createElement('li');
+              li.textContent = feature;
+              featureList.appendChild(li);
+            });
+          } else {
+            const li = document.createElement('li');
+            li.textContent = 'No specific features available for your role';
+            featureList.appendChild(li);
+          }
+          
+          // Show business information for stylists
+          if (user.role === 'stylist' && data.business_info) {
+            const businessCard = document.getElementById('businessCard');
+            businessCard.style.display = 'block';
+            document.getElementById('businessName').textContent = data.business_info.business_name;
+            document.getElementById('businessBio').textContent = data.business_info.bio;
+          }
+          
+        } catch (error) {
+          console.error('Dashboard load error:', error);
+          loadingEl.style.display = 'none';
+          errorEl.style.display = 'block';
+          errorEl.querySelector('p').textContent = 'Failed to load dashboard: ' + error.message;
+        }
+      }
+
+      // Logout functionality
+      document.getElementById('logoutBtn').addEventListener('click', async function() {
+        try {
+          // Call logout endpoint
+          await authenticatedRequest('http://localhost:8000/api/logout');
+        } catch (error) {
+          console.error('Logout request failed:', error);
+          // Continue with logout even if request fails
+        } finally {
+          // Remove token and redirect
+          TokenManager.removeToken();
+          alert('You have been logged out successfully');
+          window.location.href = '/auth';
+        }
+      });
+
+      // Load dashboard on page load
+      loadDashboard();
+    })();
+  </script>
+</body>
+</html>

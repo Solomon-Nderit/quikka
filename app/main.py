@@ -1,5 +1,8 @@
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 from db import get_session, create_db_and_tables
 from models import User, UserRole
@@ -13,6 +16,14 @@ import os
 #App instance
 app = FastAPI()
 
+# Configure paths for static files and templates
+BASE_DIR = Path(__file__).parent.parent  # Parent of app/ directory
+STATIC_DIR = BASE_DIR / "frontend"
+TEMPLATES_DIR = STATIC_DIR / "templates"
+
+# Mount static files
+app.mount("/frontend", StaticFiles(directory=str(STATIC_DIR)), name="frontend")
+
 # CORS (needed for browser fetch from a different origin/port)
 app.add_middleware(
     CORSMiddleware,
@@ -24,7 +35,26 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"message": "Backend is running"}
+    """Serve the landing page"""
+    return FileResponse(str(TEMPLATES_DIR / "landing.html"))
+
+
+@app.get("/auth")
+async def auth_page():
+    """Serve the authentication page"""
+    return FileResponse(str(TEMPLATES_DIR / "sign_up.html"))
+
+
+@app.get("/dashboard")
+async def dashboard_page():
+    """Serve the dashboard page (HTML)"""
+    return FileResponse(str(TEMPLATES_DIR / "dashboard.html"))
+
+
+@app.get("/api")
+async def api_root():
+    """API status endpoint"""
+    return {"message": "Quikka API is running", "version": "1.0.0"}
 
 @app.on_event("startup")
 def on_startup():
@@ -38,7 +68,7 @@ def hash_password(password: str) -> str:
     return f"pbkdf2_sha256$100000${salt.hex()}${dk.hex()}"
 
 
-@app.post("/signup")
+@app.post("/api/signup")
 def sign_up(payload: SignUp, session = Depends(get_session)):
     """
     User signup endpoint supporting different roles.
@@ -94,7 +124,7 @@ def sign_up(payload: SignUp, session = Depends(get_session)):
         raise HTTPException(status_code=400, detail=f"Signup not implemented for role: {payload.role}")
 
 
-@app.post("/login")
+@app.post("/api/login")
 def login(payload: Login, session = Depends(get_session)):
     """
     User login endpoint for all user types.
@@ -140,7 +170,7 @@ def login(payload: Login, session = Depends(get_session)):
     return response
 
 
-@app.get("/dashboard")
+@app.get("/api/dashboard")
 def dashboard(current_user: User = Depends(get_current_user)):
     """
     Protected dashboard endpoint that requires authentication.
@@ -190,7 +220,7 @@ def dashboard(current_user: User = Depends(get_current_user)):
     return dashboard_data
 
 
-@app.post("/logout")
+@app.post("/api/logout")
 def logout(current_user: User = Depends(get_current_user)):
     """
     User logout endpoint.

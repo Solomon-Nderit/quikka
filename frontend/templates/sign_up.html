@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quikka — Sign up or Log in</title>
-  <link rel="stylesheet" href="auth.css" />
+  <link rel="stylesheet" href="/frontend/templates/auth.css" />
 </head>
 <body>
   <!-- Navbar -->
@@ -31,7 +31,19 @@
       <h1 id="formTitle">Sign up for free</h1>
 
       <!-- Sign up form -->
-  <form id="signupForm" class="form" autocomplete="on" novalidate action="http://localhost:8000/signup" method="post">
+  <form id="signupForm" class="form" autocomplete="on" novalidate>
+        <div>
+          <label for="su-role" class="label">I am a:</label>
+          <select id="su-role" name="role" class="input" required>
+            <option value="">Select your role</option>
+            <option value="stylist">Hair Stylist</option>
+            <option value="admin">Administrator</option>
+          </select>
+        </div>
+        <div>
+          <label for="su-name" class="label">Full Name</label>
+          <input type="text" id="su-name" name="name" placeholder="Your full name" class="input" required />
+        </div>
         <div>
           <label for="su-email" class="label">Email</label>
           <input type="email" id="su-email" name="email" placeholder="you@example.com" class="input" required />
@@ -40,6 +52,23 @@
           <label for="su-password" class="label">Password</label>
           <input type="password" id="su-password" name="password" placeholder="Create a password" class="input" minlength="6" required />
         </div>
+        <div>
+          <label for="su-phone" class="label">Phone (Optional)</label>
+          <input type="tel" id="su-phone" name="phone" placeholder="+254712345678" class="input" />
+        </div>
+        
+        <!-- Stylist-specific fields (hidden by default) -->
+        <div id="stylistFields" style="display: none;">
+          <div>
+            <label for="su-business" class="label">Business Name</label>
+            <input type="text" id="su-business" name="business_name" placeholder="Your business name" class="input" />
+          </div>
+          <div>
+            <label for="su-bio" class="label">Professional Bio</label>
+            <textarea id="su-bio" name="bio" placeholder="Tell us about your experience and specialties..." class="input" rows="3" minlength="10"></textarea>
+          </div>
+        </div>
+        
         <div class="action">
           <button type="submit" class="btn primary block">Sign up</button>
         </div>
@@ -84,6 +113,52 @@
       const title = document.getElementById('formTitle');
       const caption = document.getElementById('formCaption');
       const navLoginBtn = document.getElementById('navLoginBtn');
+      const roleSelect = document.getElementById('su-role');
+      const stylistFields = document.getElementById('stylistFields');
+
+      // JWT Token Management
+      const TokenManager = {
+        setToken: function(token) {
+          localStorage.setItem('quikka_token', token);
+        },
+        getToken: function() {
+          return localStorage.getItem('quikka_token');
+        },
+        removeToken: function() {
+          localStorage.removeItem('quikka_token');
+        },
+        isAuthenticated: function() {
+          const token = this.getToken();
+          if (!token) return false;
+          
+          try {
+            // Basic JWT structure check
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const currentTime = Date.now() / 1000;
+            return payload.exp > currentTime;
+          } catch (error) {
+            console.error('Invalid token:', error);
+            this.removeToken();
+            return false;
+          }
+        }
+      };
+
+      // Show/hide stylist fields based on role selection
+      roleSelect.addEventListener('change', function() {
+        const businessField = document.getElementById('su-business');
+        const bioField = document.getElementById('su-bio');
+        
+        if (this.value === 'stylist') {
+          stylistFields.style.display = 'block';
+          businessField.required = true;
+          bioField.required = true;
+        } else {
+          stylistFields.style.display = 'none';
+          businessField.required = false;
+          bioField.required = false;
+        }
+      });
 
       function show(mode){
         const isSignup = mode === 'signup';
@@ -95,6 +170,13 @@
         history.replaceState(null, '', isSignup ? '#signup' : '#login');
       }
 
+      // Check if user is already authenticated
+      if (TokenManager.isAuthenticated()) {
+        // Redirect to dashboard if already logged in
+        window.location.href = '/dashboard';
+        return;
+      }
+
       // Initial state based on hash
       if (location.hash === '#login') show('login'); else show('signup');
 
@@ -102,29 +184,49 @@
       toSignup.addEventListener('click', e => { e.preventDefault(); show('signup'); });
       navLoginBtn.addEventListener('click', e => { e.preventDefault(); show('login'); });
 
-      // Basic demo handlers
+      // API request helper
+      async function apiRequest(url, data) {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(data)
+        });
+        
+        const responseData = await response.json().catch(() => ({}));
+        
+        if (!response.ok) {
+          const errorMessage = responseData.detail || responseData.message || `Request failed (${response.status})`;
+          throw new Error(errorMessage);
+        }
+        
+        return responseData;
+      }
+
+      // Signup form handler
       signupForm.addEventListener('submit', async e => {
         e.preventDefault();
-        const email = document.getElementById('su-email').value.trim();
-        const password = document.getElementById('su-password').value;
+        
+        const formData = new FormData(signupForm);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Remove empty fields
+        Object.keys(data).forEach(key => {
+          if (!data[key]) delete data[key];
+        });
+        
         const submitBtn = signupForm.querySelector('button[type="submit"]');
         const originalText = submitBtn.textContent;
         submitBtn.disabled = true;
         submitBtn.textContent = 'Signing up...';
+        
         try {
-          const res = await fetch('http://localhost:8000/signup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password })
-          });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            const msg = (data && (data.message || data.error?.message)) || `Request failed (${res.status})`;
-            throw new Error(msg);
-          }
-          alert('Sign up successful');
-          // Optionally redirect or switch to login
-          // show('login');
+          const response = await apiRequest('http://localhost:8000/api/signup', data);
+          alert('Sign up successful! Please log in with your credentials.');
+          show('login');
+          signupForm.reset();
         } catch (err) {
           alert('Sign up failed: ' + err.message);
         } finally {
@@ -132,9 +234,38 @@
           submitBtn.textContent = originalText;
         }
       });
-      loginForm.addEventListener('submit', e => {
+
+      // Login form handler
+      loginForm.addEventListener('submit', async e => {
         e.preventDefault();
-        alert('Login submitted');
+        
+        const email = document.getElementById('li-email').value.trim();
+        const password = document.getElementById('li-password').value;
+        
+        const submitBtn = loginForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Logging in...';
+        
+        try {
+          const response = await apiRequest('http://localhost:8000/api/login', { email, password });
+          
+          // Store JWT token
+          if (response.access_token) {
+            TokenManager.setToken(response.access_token);
+            alert(`Welcome back, ${response.user.name}!`);
+            
+            // Redirect to dashboard
+            window.location.href = 'http://localhost:8000/dashboard';
+          } else {
+            throw new Error('No access token received');
+          }
+        } catch (err) {
+          alert('Login failed: ' + err.message);
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalText;
+        }
       });
     })();
   </script>
