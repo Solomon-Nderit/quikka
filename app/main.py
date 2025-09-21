@@ -222,6 +222,109 @@ def dashboard(current_user: User = Depends(get_current_user)):
     return dashboard_data
 
 
+@app.get("/api/profile")
+def get_user_profile(current_user: User = Depends(get_current_user)):
+    """
+    Get user profile information for dashboard sidebar and general user data.
+    
+    Returns the same structure as dashboard but focused on user profile data.
+    This endpoint is used by the dashboard to populate user information in the sidebar.
+    """
+    # Prepare response based on user role
+    profile_data = {
+        "user": {
+            "id": current_user.id,
+            "name": current_user.name,
+            "email": current_user.email,
+            "phone": current_user.phone,
+            "role": current_user.role,
+            "created_at": current_user.created_at.isoformat()
+        }
+    }
+    
+    # Add stylist profile information if user is a stylist
+    if current_user.role == UserRole.stylist:
+        session = next(get_session())
+        stylist = get_stylist_by_user_id(session, current_user.id)
+        
+        if stylist:
+            profile_data["user"]["stylist_profile"] = {
+                "id": stylist.id,
+                "business_name": stylist.business_name,
+                "bio": stylist.bio,
+                "profile_image_url": stylist.profile_image_url
+            }
+    
+    return profile_data
+
+
+@app.get("/api/bookings")
+def get_bookings(current_user: User = Depends(get_current_user)):
+    """
+    Get bookings for the current user (stylist).
+    
+    For now, returns mock data. In the future, this will query the database
+    for actual bookings related to the current stylist.
+    """
+    # Mock bookings data for now
+    mock_bookings = [
+        {
+            "id": "booking-1",
+            "client_name": "Ava Harper",
+            "client_email": "ava@example.com",
+            "client_phone": "+254712345678",
+            "service_id": "service-1",
+            "service_name": "Haircut",
+            "appointment_date": "2024-07-22",
+            "appointment_time": "10:00 AM",
+            "duration_minutes": 60,
+            "price": 50.00,
+            "status": "confirmed",
+            "notes": "Regular customer",
+            "created_at": "2024-07-20T10:00:00.000000",
+            "updated_at": "2024-07-20T10:00:00.000000"
+        },
+        {
+            "id": "booking-2",
+            "client_name": "Olivia Bennett",
+            "client_email": "olivia@example.com",
+            "client_phone": "+254787654321",
+            "service_id": "service-2",
+            "service_name": "Manicure",
+            "appointment_date": "2024-07-23",
+            "appointment_time": "2:00 PM",
+            "duration_minutes": 45,
+            "price": 35.00,
+            "status": "pending",
+            "notes": "First time customer",
+            "created_at": "2024-07-21T14:00:00.000000",
+            "updated_at": "2024-07-21T14:00:00.000000"
+        },
+        {
+            "id": "booking-3",
+            "client_name": "Chloe Carter",
+            "client_email": "chloe@example.com",
+            "client_phone": "+254798765432",
+            "service_id": "service-3",
+            "service_name": "Facial",
+            "appointment_date": "2024-07-24",
+            "appointment_time": "11:00 AM",
+            "duration_minutes": 90,
+            "price": 75.00,
+            "status": "completed",
+            "notes": "Requested organic products",
+            "created_at": "2024-07-22T11:00:00.000000",
+            "updated_at": "2024-07-24T12:30:00.000000"
+        }
+    ]
+    
+    return {
+        "bookings": mock_bookings,
+        "total": len(mock_bookings),
+        "has_more": False
+    }
+
+
 @app.post("/api/logout")
 def logout(current_user: User = Depends(get_current_user)):
     """
