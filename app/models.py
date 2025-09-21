@@ -23,7 +23,7 @@ class User(SQLModel, table=True):
     phone: Optional[str] = Field(default=None, index=True, sa_column_kwargs={"unique": True})
     password_hash: str
     role: UserRole = Field(index=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=datetime.now, nullable=False)
 
 # Stylist-specific table
 class Stylist(SQLModel, table=True):
@@ -32,7 +32,7 @@ class Stylist(SQLModel, table=True):
     business_name: str  # Required for stylists
     bio: str  # Required for stylists
     profile_image_url: Optional[str] = None
-
+ 
 
 # Request schemas
 class UserCreate(SQLModel):
