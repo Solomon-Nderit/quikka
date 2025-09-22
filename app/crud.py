@@ -1,8 +1,10 @@
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 
 from sqlmodel import Session, select
 
-from models import Stylist, User, UserCreate, StylistSignup, UserRole
+from models import Stylist, User, UserCreate, StylistSignup, UserRole, Booking, BookingStatus
+from schemas import BookingCreate, BookingUpdate
 import hashlib
 
 
@@ -110,6 +112,11 @@ def get_stylist_by_user_id(session: Session, user_id: int) -> Optional[Stylist]:
     return session.exec(select(Stylist).where(Stylist.user_id == user_id)).first()
 
 
+def get_stylist_by_id(session: Session, stylist_id: int) -> Optional[Stylist]:
+    """Get stylist profile by stylist ID"""
+    return session.exec(select(Stylist).where(Stylist.id == stylist_id)).first()
+
+
 def get_stylist_with_user(session: Session, stylist_id: int) -> Optional[tuple[Stylist, User]]:
     """Get stylist with their user data using a join"""
     result = session.exec(
@@ -138,3 +145,139 @@ def get_all_stylists_with_users(session: Session, offset: int = 0, limit: int = 
 #     session.commit()
 #     session.refresh(customer)
 #     return customer
+
+
+# Booking CRUD operations
+def create_booking(session: Session, stylist_id: int, booking_data: BookingCreate) -> Booking:
+    """Create a new booking for a stylist"""
+    booking = Booking(
+        stylist_id=stylist_id,
+        client_name=booking_data.client_name,
+        client_email=booking_data.client_email,
+        client_phone=booking_data.client_phone,
+        service_name=booking_data.service_name,
+        service_description=booking_data.service_description,
+        appointment_date=booking_data.appointment_date,
+        appointment_time=booking_data.appointment_time,
+        duration_minutes=booking_data.duration_minutes,
+        price=booking_data.price,
+        currency=booking_data.currency,
+        notes=booking_data.notes,
+        status=BookingStatus.pending  # New bookings start as pending
+    )
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+    return booking
+
+
+def create_public_booking(session: Session, booking_data) -> Booking:
+    """Create a new booking from public request (includes stylist_id in the data)"""
+    booking = Booking(
+        stylist_id=booking_data.stylist_id,
+        client_name=booking_data.client_name,
+        client_email=booking_data.client_email,
+        client_phone=booking_data.client_phone,
+        service_name=booking_data.service_name,
+        service_description=booking_data.service_description,
+        appointment_date=booking_data.appointment_date,
+        appointment_time=booking_data.appointment_time,
+        duration_minutes=booking_data.duration_minutes,
+        price=booking_data.price,
+        currency=booking_data.currency,
+        notes=booking_data.notes,
+        status=BookingStatus.pending  # New bookings start as pending
+    )
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+    return booking
+
+
+def get_bookings_by_stylist(session: Session, stylist_id: int, offset: int = 0, limit: int = 100) -> List[Booking]:
+    """Get all bookings for a specific stylist"""
+    return session.exec(
+        select(Booking)
+        .where(Booking.stylist_id == stylist_id)
+        .order_by(Booking.appointment_date.desc(), Booking.appointment_time.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+
+def get_booking_by_id(session: Session, booking_id: int, stylist_id: Optional[int] = None) -> Optional[Booking]:
+    """Get a specific booking by ID, optionally filtered by stylist"""
+    query = select(Booking).where(Booking.id == booking_id)
+    
+    if stylist_id is not None:
+        query = query.where(Booking.stylist_id == stylist_id)
+    
+    return session.exec(query).first()
+
+
+def update_booking(session: Session, booking_id: int, booking_data: BookingUpdate, stylist_id: Optional[int] = None) -> Optional[Booking]:
+    """Update an existing booking"""
+    # Get the booking first
+    booking = get_booking_by_id(session, booking_id, stylist_id)
+    if not booking:
+        return None
+    
+    # Update only provided fields
+    update_data = booking_data.dict(exclude_unset=True)
+    
+    for field, value in update_data.items():
+        if hasattr(booking, field):
+            setattr(booking, field, value)
+    
+    # Update the timestamp
+    booking.updated_at = datetime.now()
+    
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+    return booking
+
+
+def delete_booking(session: Session, booking_id: int, stylist_id: Optional[int] = None) -> bool:
+    """Delete a booking"""
+    booking = get_booking_by_id(session, booking_id, stylist_id)
+    if not booking:
+        return False
+    
+    session.delete(booking)
+    session.commit()
+    return True
+
+
+def get_booking_with_stylist_info(session: Session, booking_id: int) -> Optional[tuple[Booking, Stylist, User]]:
+    """Get booking with associated stylist and user information"""
+    result = session.exec(
+        select(Booking, Stylist, User)
+        .join(Stylist, Booking.stylist_id == Stylist.id)
+        .join(User, Stylist.user_id == User.id)
+        .where(Booking.id == booking_id)
+    ).first()
+    return result
+
+
+def count_bookings_by_stylist(session: Session, stylist_id: int) -> int:
+    """Count total bookings for a stylist"""
+    return session.exec(
+        select(Booking)
+        .where(Booking.stylist_id == stylist_id)
+    ).count() or 0
+
+
+def get_upcoming_bookings_by_stylist(session: Session, stylist_id: int, limit: int = 10) -> List[Booking]:
+    """Get upcoming bookings for a stylist (today and future)"""
+    from datetime import date
+    today = date.today()
+    
+    return session.exec(
+        select(Booking)
+        .where(Booking.stylist_id == stylist_id)
+        .where(Booking.appointment_date >= today)
+        .where(Booking.status.in_([BookingStatus.pending, BookingStatus.confirmed]))
+        .order_by(Booking.appointment_date.asc(), Booking.appointment_time.asc())
+        .limit(limit)
+    ).all()

@@ -1,8 +1,9 @@
 
 from typing import Optional, Union, Literal
+from datetime import date, time, datetime
 
 from pydantic import BaseModel, EmailStr, Field, validator
-from models import UserRole
+from models import UserRole, BookingStatus
 
 
 class StylistSignUp(BaseModel):
@@ -79,3 +80,154 @@ class Login(BaseModel):
 
 # Union type for the signup endpoint - FastAPI will show both options in Swagger
 SignUp = Union[StylistSignUp, AdminSignUp]
+
+
+# Booking schemas
+class BookingCreate(BaseModel):
+    client_name: str = Field(description="Client's full name")
+    client_email: EmailStr = Field(description="Client's email address")
+    client_phone: Optional[str] = Field(default=None, description="Client's phone number (optional)")
+    
+    service_name: str = Field(description="Name of the service (e.g., 'Haircut', 'Manicure')")
+    service_description: Optional[str] = Field(default=None, description="Additional service details")
+    
+    appointment_date: date = Field(description="Date of the appointment (YYYY-MM-DD)")
+    appointment_time: time = Field(description="Time of the appointment (HH:MM)")
+    duration_minutes: int = Field(default=60, ge=15, le=480, description="Duration in minutes (15-480 min)")
+    
+    price: float = Field(ge=0, description="Service price")
+    currency: str = Field(default="KES", description="Currency code")
+    
+    notes: Optional[str] = Field(default=None, description="Additional notes")
+
+    @validator('appointment_date')
+    def validate_appointment_date(cls, v):
+        from datetime import date as dt_date
+        if v < dt_date.today():
+            raise ValueError('Appointment date cannot be in the past')
+        return v
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "client_name": "Jane Doe",
+                "client_email": "jane.doe@example.com",
+                "client_phone": "+254712345678",
+                "service_name": "Hair Cut & Style",
+                "service_description": "Full haircut with styling",
+                "appointment_date": "2024-12-25",
+                "appointment_time": "14:30",
+                "duration_minutes": 90,
+                "price": 2500.0,
+                "currency": "KES",
+                "notes": "Client prefers natural products"
+            }
+        }
+
+
+class BookingUpdate(BaseModel):
+    client_name: Optional[str] = Field(default=None, description="Client's full name")
+    client_email: Optional[EmailStr] = Field(default=None, description="Client's email address")
+    client_phone: Optional[str] = Field(default=None, description="Client's phone number")
+    
+    service_name: Optional[str] = Field(default=None, description="Name of the service")
+    service_description: Optional[str] = Field(default=None, description="Service description")
+    
+    appointment_date: Optional[date] = Field(default=None, description="Date of the appointment")
+    appointment_time: Optional[time] = Field(default=None, description="Time of the appointment")
+    duration_minutes: Optional[int] = Field(default=None, ge=15, le=480, description="Duration in minutes")
+    
+    price: Optional[float] = Field(default=None, ge=0, description="Service price")
+    currency: Optional[str] = Field(default=None, description="Currency code")
+    
+    status: Optional[BookingStatus] = Field(default=None, description="Booking status")
+    notes: Optional[str] = Field(default=None, description="Additional notes")
+
+    @validator('appointment_date')
+    def validate_appointment_date(cls, v):
+        if v is not None:
+            from datetime import date as dt_date
+            if v < dt_date.today():
+                raise ValueError('Appointment date cannot be in the past')
+        return v
+
+
+class BookingPublic(BaseModel):
+    id: int
+    stylist_id: int
+    
+    client_name: str
+    client_email: str
+    client_phone: Optional[str]
+    
+    service_name: str
+    service_description: Optional[str]
+    
+    appointment_date: date
+    appointment_time: time
+    duration_minutes: int
+    
+    price: float
+    currency: str
+    
+    status: BookingStatus
+    notes: Optional[str]
+    
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True  # Allows conversion from SQLModel objects
+
+
+class BookingWithStylist(BookingPublic):
+    """Booking response that includes stylist information"""
+    stylist_business_name: str
+    stylist_name: str
+    stylist_email: str
+
+
+class PublicBookingCreate(BaseModel):
+    """Schema for public booking creation (no authentication required)"""
+    stylist_id: int = Field(description="ID of the stylist to book with")
+    
+    client_name: str = Field(description="Client's full name")
+    client_email: EmailStr = Field(description="Client's email address")
+    client_phone: Optional[str] = Field(default=None, description="Client's phone number (optional)")
+    
+    service_name: str = Field(description="Name of the service (e.g., 'Haircut', 'Manicure')")
+    service_description: Optional[str] = Field(default=None, description="Additional service details")
+    
+    appointment_date: date = Field(description="Date of the appointment (YYYY-MM-DD)")
+    appointment_time: time = Field(description="Time of the appointment (HH:MM)")
+    duration_minutes: int = Field(default=60, ge=15, le=480, description="Duration in minutes (15-480 min)")
+    
+    price: float = Field(ge=0, description="Service price")
+    currency: str = Field(default="KES", description="Currency code")
+    
+    notes: Optional[str] = Field(default=None, description="Additional notes")
+
+    @validator('appointment_date')
+    def validate_appointment_date(cls, v):
+        from datetime import date as dt_date
+        if v < dt_date.today():
+            raise ValueError('Appointment date cannot be in the past')
+        return v
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "stylist_id": 1,
+                "client_name": "Jane Doe",
+                "client_email": "jane.doe@example.com",
+                "client_phone": "+254712345678",
+                "service_name": "Hair Cut & Style",
+                "service_description": "Full haircut with styling",
+                "appointment_date": "2025-09-25",
+                "appointment_time": "14:30",
+                "duration_minutes": 90,
+                "price": 3500.0,
+                "currency": "KES",
+                "notes": "Client prefers natural products"
+            }
+        }
