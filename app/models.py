@@ -23,6 +23,16 @@ class BookingStatus(str, enum.Enum):
     no_show = "no_show"
 
 
+class DayOfWeek(int, enum.Enum):
+    MONDAY = 0
+    TUESDAY = 1
+    WEDNESDAY = 2
+    THURSDAY = 3
+    FRIDAY = 4
+    SATURDAY = 5
+    SUNDAY = 6
+
+
 # Main User table - common fields for all user types
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -70,6 +80,28 @@ class Booking(SQLModel, table=True):
     # Status and metadata
     status: BookingStatus = Field(default=BookingStatus.pending)
     notes: Optional[str] = None  # Additional notes from client or stylist
+    
+    # Timestamps
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+
+# Stylist availability table - defines when stylists are available for bookings
+class StylistAvailability(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Stylist relationship
+    stylist_id: int = Field(foreign_key="stylist.id")
+    
+    # Day of the week (0=Monday, 1=Tuesday, ..., 6=Sunday)
+    day_of_week: DayOfWeek
+    
+    # Available time range for this day
+    start_time: time = Field(description="Start of available hours (e.g., 08:00)")
+    end_time: time = Field(description="End of available hours (e.g., 17:00)")
+    
+    # Active flag (allows temporary disabling without deletion)
+    is_active: bool = Field(default=True)
     
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.now)

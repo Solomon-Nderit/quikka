@@ -6,8 +6,8 @@ from pathlib import Path
 from sqlmodel import Session, select
 
 from db import get_session, create_db_and_tables
-from models import User, UserRole, Booking, Stylist
-from crud import create_stylist_user, create_user, get_user_by_email, authenticate_user, get_stylist_by_user_id, create_booking, get_bookings_by_stylist, get_booking_by_id, update_booking, delete_booking, get_upcoming_bookings_by_stylist, get_stylist_by_id, create_public_booking
+from models import User, UserRole, Booking, Stylist, StylistAvailability, DayOfWeek
+from crud import create_stylist_user, create_user, get_user_by_email, authenticate_user, get_stylist_by_user_id, create_booking, get_bookings_by_stylist, get_booking_by_id, update_booking, delete_booking, get_upcoming_bookings_by_stylist, get_stylist_by_id, create_public_booking, is_time_slot_available, create_default_availability, get_stylist_availability, update_stylist_availability, get_available_time_slots
 from schemas import SignUp, StylistSignUp, AdminSignUp, Login, BookingCreate, BookingUpdate, BookingPublic, PublicBookingCreate
 from auth import create_access_token, get_current_user
 from notifications import send_booking_confirmation_emails
@@ -90,6 +90,12 @@ def sign_up(payload: SignUp, session = Depends(get_session)):
         
         # Create stylist user (both User + Stylist records)
         user, stylist = create_stylist_user(session, stylist_payload, hash_password(payload.password))
+        
+        # Create default availability (Mon-Sat 8AM-5PM)
+        try:
+            create_default_availability(session, stylist.id)
+        except Exception as e:
+            print(f"Warning: Failed to create default availability for stylist {stylist.id}: {str(e)}")
         
         return {
             "message": "Stylist account created successfully",
@@ -322,6 +328,18 @@ def create_new_booking(booking_data: BookingCreate, current_user: User = Depends
     if not stylist:
         raise HTTPException(status_code=404, detail="Stylist profile not found")
     
+    # Validate time slot availability
+    is_available, availability_message = is_time_slot_available(
+        session, 
+        stylist.id, 
+        booking_data.appointment_date, 
+        booking_data.appointment_time, 
+        booking_data.duration_minutes
+    )
+    
+    if not is_available:
+        raise HTTPException(status_code=409, detail=f"Time slot not available: {availability_message}")
+    
     # Create the booking
     try:
         booking = create_booking(session, stylist.id, booking_data)
@@ -369,6 +387,34 @@ def update_booking_detail(booking_id: int, booking_data: BookingUpdate, current_
     stylist = get_stylist_by_user_id(session, current_user.id)
     if not stylist:
         raise HTTPException(status_code=404, detail="Stylist profile not found")
+    
+    # Get the existing booking first to check if time is being changed
+    existing_booking = get_booking_by_id(session, booking_id, stylist.id)
+    if not existing_booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    # If appointment date or time is being changed, validate availability
+    if (booking_data.appointment_date and booking_data.appointment_date != existing_booking.appointment_date) or \
+       (booking_data.appointment_time and booking_data.appointment_time != existing_booking.appointment_time) or \
+       (booking_data.duration_minutes and booking_data.duration_minutes != existing_booking.duration_minutes):
+        
+        # Use new values or existing ones
+        check_date = booking_data.appointment_date or existing_booking.appointment_date
+        check_time = booking_data.appointment_time or existing_booking.appointment_time
+        check_duration = booking_data.duration_minutes or existing_booking.duration_minutes
+        
+        # Validate time slot availability (excluding current booking)
+        is_available, availability_message = is_time_slot_available(
+            session, 
+            stylist.id, 
+            check_date, 
+            check_time, 
+            check_duration,
+            exclude_booking_id=booking_id
+        )
+        
+        if not is_available:
+            raise HTTPException(status_code=409, detail=f"Updated time slot not available: {availability_message}")
     
     # Update the booking
     updated_booking = update_booking(session, booking_id, booking_data, stylist.id)
@@ -420,6 +466,18 @@ def create_public_booking_endpoint(booking_data: PublicBookingCreate, session: S
     stylist = get_stylist_by_id(session, booking_data.stylist_id)
     if not stylist:
         raise HTTPException(status_code=404, detail=f"Stylist with ID {booking_data.stylist_id} not found")
+    
+    # Validate time slot availability
+    is_available, availability_message = is_time_slot_available(
+        session, 
+        booking_data.stylist_id, 
+        booking_data.appointment_date, 
+        booking_data.appointment_time, 
+        booking_data.duration_minutes
+    )
+    
+    if not is_available:
+        raise HTTPException(status_code=409, detail=f"Time slot not available: {availability_message}")
     
     # Get stylist user information for email notifications
     stylist_user = session.exec(select(User).where(User.id == stylist.user_id)).first()
@@ -488,4 +546,207 @@ def logout(current_user: User = Depends(get_current_user)):
     return {
         "message": f"Successfully logged out {current_user.name}",
         "instruction": "Please remove the token from your client storage (localStorage/sessionStorage)"
+    }
+
+
+@app.get("/api/stylists/availability", response_model=dict)
+def get_stylist_availability_endpoint(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    """
+    Get availability schedule for the current stylist.
+    
+    Returns working hours for each day of the week.
+    """
+    # Only stylists can access their availability
+    if current_user.role != UserRole.stylist:
+        raise HTTPException(status_code=403, detail="Only stylists can access availability settings")
+    
+    # Get stylist profile
+    stylist = get_stylist_by_user_id(session, current_user.id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist profile not found")
+    
+    # Get availability
+    availability_records = get_stylist_availability(session, stylist.id)
+    
+    # Format response
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    schedule = {}
+    
+    for record in availability_records:
+        day_name = day_names[record.day_of_week.value]
+        schedule[day_name.lower()] = {
+            "day_of_week": record.day_of_week.value,
+            "day_name": day_name,
+            "start_time": record.start_time.strftime('%H:%M'),
+            "end_time": record.end_time.strftime('%H:%M'),
+            "is_active": record.is_active
+        }
+    
+    return {
+        "stylist_id": stylist.id,
+        "schedule": schedule
+    }
+
+
+@app.put("/api/stylists/availability", response_model=dict)
+def update_stylist_availability_endpoint(
+    availability_updates: dict, 
+    current_user: User = Depends(get_current_user), 
+    session: Session = Depends(get_session)
+):
+    """
+    Update availability schedule for the current stylist.
+    
+    Expected format:
+    {
+        "monday": {"start_time": "08:00", "end_time": "17:00"},
+        "tuesday": {"start_time": "09:00", "end_time": "18:00"},
+        ...
+    }
+    """
+    # Only stylists can update their availability
+    if current_user.role != UserRole.stylist:
+        raise HTTPException(status_code=403, detail="Only stylists can update availability settings")
+    
+    # Get stylist profile
+    stylist = get_stylist_by_user_id(session, current_user.id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist profile not found")
+    
+    day_mapping = {
+        "monday": DayOfWeek.MONDAY,
+        "tuesday": DayOfWeek.TUESDAY,
+        "wednesday": DayOfWeek.WEDNESDAY,
+        "thursday": DayOfWeek.THURSDAY,
+        "friday": DayOfWeek.FRIDAY,
+        "saturday": DayOfWeek.SATURDAY,
+        "sunday": DayOfWeek.SUNDAY
+    }
+    
+    updated_days = []
+    errors = []
+    
+    for day_str, times in availability_updates.items():
+        if day_str.lower() not in day_mapping:
+            errors.append(f"Invalid day: {day_str}")
+            continue
+        
+        try:
+            from datetime import time as dt_time
+            start_time = dt_time.fromisoformat(times['start_time'])
+            end_time = dt_time.fromisoformat(times['end_time'])
+            
+            if start_time >= end_time:
+                errors.append(f"{day_str}: Start time must be before end time")
+                continue
+            
+            day_of_week = day_mapping[day_str.lower()]
+            update_stylist_availability(session, stylist.id, day_of_week, start_time, end_time)
+            updated_days.append(day_str.title())
+            
+        except (ValueError, KeyError) as e:
+            errors.append(f"{day_str}: Invalid time format - {str(e)}")
+    
+    if errors:
+        raise HTTPException(status_code=400, detail={"errors": errors, "updated": updated_days})
+    
+    return {
+        "message": f"Availability updated for {', '.join(updated_days)}",
+        "updated_days": updated_days
+    }
+
+
+@app.get("/api/stylists/{stylist_id}/available-times", response_model=dict)
+def get_stylist_available_times(
+    stylist_id: int,
+    appointment_date: str = None,
+    duration_minutes: int = 60,
+    session: Session = Depends(get_session)
+):
+    """
+    Get available time slots for a specific stylist on a specific date.
+    
+    This endpoint can be used by both authenticated users and public clients.
+    Perfect for showing available booking times in the frontend.
+    
+    Query parameters:
+    - appointment_date: Date in YYYY-MM-DD format (defaults to today if not provided)
+    - duration_minutes: Duration of appointment in minutes (default: 60)
+    """
+    from datetime import datetime, date
+    
+    # Use today's date if no date is provided
+    if appointment_date is None:
+        parsed_date = date.today()
+        appointment_date = parsed_date.strftime('%Y-%m-%d')
+    else:
+        try:
+            # Parse provided date
+            parsed_date = datetime.strptime(appointment_date, '%Y-%m-%d').date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Validate stylist exists
+    stylist = get_stylist_by_id(session, stylist_id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist not found")
+    
+    # Get stylist user info for the response
+    stylist_user = session.exec(select(User).where(User.id == stylist.user_id)).first()
+    
+    # Get available slots
+    available_slots = get_available_time_slots(session, stylist_id, parsed_date, duration_minutes)
+    
+    return {
+        "stylist": {
+            "id": stylist.id,
+            "name": stylist_user.name if stylist_user else "Unknown",
+            "business_name": stylist.business_name
+        },
+        "appointment_date": appointment_date,
+        "duration_minutes": duration_minutes,
+        "available_slots": available_slots,
+        "total_slots": len(available_slots),
+        "message": f"Found {len(available_slots)} available slots for {stylist.business_name} on {appointment_date}"
+    }
+
+
+@app.get("/api/public/stylists/{stylist_id}/availability", response_model=dict)
+def get_public_availability_slots(
+    stylist_id: int,
+    appointment_date: str,
+    duration_minutes: int = 60,
+    session: Session = Depends(get_session)
+):
+    """
+    Get available time slots for a stylist on a specific date.
+    
+    This is a public endpoint for clients to see available booking times.
+    
+    Query parameters:
+    - appointment_date: Date in YYYY-MM-DD format
+    - duration_minutes: Duration of appointment (default: 60)
+    """
+    from datetime import datetime
+    
+    try:
+        # Parse date
+        parsed_date = datetime.strptime(appointment_date, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Validate stylist exists
+    stylist = get_stylist_by_id(session, stylist_id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist not found")
+    
+    # Get available slots
+    available_slots = get_available_time_slots(session, stylist_id, parsed_date, duration_minutes)
+    
+    return {
+        "stylist_id": stylist_id,
+        "appointment_date": appointment_date,
+        "duration_minutes": duration_minutes,
+        "available_slots": available_slots,
+        "total_slots": len(available_slots)
     }
