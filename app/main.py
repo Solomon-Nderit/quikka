@@ -6,9 +6,9 @@ from pathlib import Path
 from sqlmodel import Session, select
 
 from db import get_session, create_db_and_tables
-from models import User, UserRole, Booking, Stylist, StylistAvailability, DayOfWeek
-from crud import create_stylist_user, create_user, get_user_by_email, authenticate_user, get_stylist_by_user_id, create_booking, get_bookings_by_stylist, get_booking_by_id, update_booking, delete_booking, get_upcoming_bookings_by_stylist, get_stylist_by_id, create_public_booking, is_time_slot_available, create_default_availability, get_stylist_availability, update_stylist_availability, get_available_time_slots
-from schemas import SignUp, StylistSignUp, AdminSignUp, Login, BookingCreate, BookingUpdate, BookingPublic, PublicBookingCreate
+from models import User, UserRole, Booking, Stylist, StylistAvailability, DayOfWeek, ProfessionalSettings, BookingStatusHistory
+from crud import create_stylist_user, create_user, get_user_by_email, authenticate_user, get_stylist_by_user_id, create_booking, get_bookings_by_stylist, get_booking_by_id, update_booking, delete_booking, get_upcoming_bookings_by_stylist, get_stylist_by_id, create_public_booking, is_time_slot_available, create_default_availability, get_stylist_availability, update_stylist_availability, get_available_time_slots, update_booking_status_with_history, reschedule_booking, get_professional_settings, update_professional_settings, check_for_no_shows, create_default_professional_settings
+from schemas import SignUp, StylistSignUp, AdminSignUp, Login, BookingCreate, BookingUpdate, BookingPublic, PublicBookingCreate, BookingStatusUpdate, BookingRescheduleRequest
 from auth import create_access_token, get_current_user
 from notifications import send_booking_confirmation_emails
 import hashlib
@@ -445,6 +445,185 @@ def delete_booking_detail(booking_id: int, current_user: User = Depends(get_curr
         raise HTTPException(status_code=404, detail="Booking not found")
     
     return {"message": "Booking deleted successfully"}
+
+
+@app.put("/api/bookings/{booking_id}/status")
+def update_booking_status(
+    booking_id: int, 
+    status_update: BookingStatusUpdate, 
+    current_user: User = Depends(get_current_user), 
+    session: Session = Depends(get_session)
+):
+    """
+    Update booking status (complete, cancel, etc.)
+    
+    Only stylists can update the status of their own bookings.
+    """
+    # Only stylists can update booking status
+    if current_user.role != UserRole.stylist:
+        raise HTTPException(status_code=403, detail="Only stylists can update booking status")
+    
+    # Get stylist profile
+    stylist = get_stylist_by_user_id(session, current_user.id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist profile not found")
+    
+    # Update booking status with history tracking
+    updated_booking = update_booking_status_with_history(
+        session, 
+        booking_id, 
+        status_update.status, 
+        current_user.id, 
+        status_update.reason, 
+        stylist.id
+    )
+    
+    if not updated_booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    return {
+        "message": f"Booking status updated to {status_update.status}",
+        "booking": updated_booking
+    }
+
+
+@app.post("/api/bookings/{booking_id}/reschedule")
+def request_booking_reschedule(
+    booking_id: int,
+    reschedule_data: BookingRescheduleRequest,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Request to reschedule a booking.
+    
+    For now, stylists can approve their own reschedules.
+    Later this can be extended for client-initiated reschedule requests.
+    """
+    # Only stylists can reschedule for now
+    if current_user.role != UserRole.stylist:
+        raise HTTPException(status_code=403, detail="Only stylists can reschedule bookings currently")
+    
+    # Get stylist profile
+    stylist = get_stylist_by_user_id(session, current_user.id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist profile not found")
+    
+    try:
+        rescheduled_booking = reschedule_booking(
+            session,
+            booking_id,
+            reschedule_data.new_appointment_date,
+            reschedule_data.new_appointment_time,
+            reschedule_data.reschedule_reason,
+            stylist.id
+        )
+        
+        if not rescheduled_booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        
+        return {
+            "message": "Booking rescheduled successfully",
+            "booking": rescheduled_booking
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/stylists/settings")
+def get_stylist_settings(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    """
+    Get professional settings for the current stylist.
+    """
+    if current_user.role != UserRole.stylist:
+        raise HTTPException(status_code=403, detail="Only stylists can access professional settings")
+    
+    stylist = get_stylist_by_user_id(session, current_user.id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist profile not found")
+    
+    settings = get_professional_settings(session, stylist.id)
+    if not settings:
+        # Create default settings if they don't exist
+        settings = create_default_professional_settings(session, stylist.id)
+    
+    return {
+        "settings": {
+            "cancellation_deadline_hours": settings.cancellation_deadline_hours,
+            "max_reschedules_allowed": settings.max_reschedules_allowed,
+            "no_show_grace_period_minutes": settings.no_show_grace_period_minutes,
+            "auto_confirm_bookings": settings.auto_confirm_bookings,
+            "require_prepayment": settings.require_prepayment
+        }
+    }
+
+
+@app.put("/api/stylists/settings")
+def update_stylist_settings(
+    settings_data: dict,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Update professional settings for the current stylist.
+    """
+    if current_user.role != UserRole.stylist:
+        raise HTTPException(status_code=403, detail="Only stylists can update professional settings")
+    
+    stylist = get_stylist_by_user_id(session, current_user.id)
+    if not stylist:
+        raise HTTPException(status_code=404, detail="Stylist profile not found")
+    
+    # Validate settings data
+    allowed_fields = {
+        'cancellation_deadline_hours', 'max_reschedules_allowed', 
+        'no_show_grace_period_minutes', 'auto_confirm_bookings', 'require_prepayment'
+    }
+    
+    filtered_data = {k: v for k, v in settings_data.items() if k in allowed_fields}
+    
+    if not filtered_data:
+        raise HTTPException(status_code=400, detail="No valid settings provided")
+    
+    updated_settings = update_professional_settings(session, stylist.id, filtered_data)
+    
+    return {
+        "message": "Professional settings updated successfully",
+        "settings": {
+            "cancellation_deadline_hours": updated_settings.cancellation_deadline_hours,
+            "max_reschedules_allowed": updated_settings.max_reschedules_allowed,
+            "no_show_grace_period_minutes": updated_settings.no_show_grace_period_minutes,
+            "auto_confirm_bookings": updated_settings.auto_confirm_bookings,
+            "require_prepayment": updated_settings.require_prepayment
+        }
+    }
+
+
+@app.post("/api/admin/check-no-shows")
+def check_no_shows_endpoint(current_user: User = Depends(get_current_user), session: Session = Depends(get_session)):
+    """
+    Admin endpoint to manually check for no-shows.
+    
+    In production, this would be called by a scheduled task/cron job.
+    """
+    if current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Only admins can trigger no-show checks")
+    
+    no_show_bookings = check_for_no_shows(session)
+    
+    return {
+        "message": f"Checked for no-shows, found {len(no_show_bookings)} bookings to mark as no-show",
+        "no_show_bookings": [
+            {
+                "id": booking.id,
+                "client_name": booking.client_name,
+                "appointment_date": booking.appointment_date.isoformat(),
+                "appointment_time": booking.appointment_time.strftime("%H:%M")
+            }
+            for booking in no_show_bookings
+        ]
+    }
 
 
 @app.post("/api/public/bookings", response_model=BookingPublic)

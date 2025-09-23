@@ -3,7 +3,7 @@ from datetime import datetime, time, date, timedelta
 
 from sqlmodel import Session, select
 
-from models import Stylist, User, UserCreate, StylistSignup, UserRole, Booking, BookingStatus, StylistAvailability, DayOfWeek
+from models import Stylist, User, UserCreate, StylistSignup, UserRole, Booking, BookingStatus, StylistAvailability, DayOfWeek, ProfessionalSettings, BookingStatusHistory
 from schemas import BookingCreate, BookingUpdate
 import hashlib
 
@@ -98,6 +98,9 @@ def create_stylist_user(session: Session, payload: StylistSignup, password_hash:
         bio=payload.bio,
         profile_image_url=payload.profile_image_url
     )
+    
+    # Create default professional settings
+    create_default_professional_settings(session, stylist.id, "stylist")
     
     return user, stylist
 
@@ -388,12 +391,14 @@ def check_booking_conflicts(session: Session, stylist_id: int, appointment_date:
     proposed_start = dt.combine(appointment_date, appointment_time)
     proposed_end = proposed_start + timedelta(minutes=duration_minutes)
     
-    # Get all bookings for this stylist on this date (excluding cancelled/no_show)
+    # Get all bookings for this stylist on this date (only active bookings that block time slots)
+    # Excluded: cancelled, no_show (these free up the time slot)
+    # Included: pending, confirmed, reschedule_requested, completed (these occupy the time slot)
     existing_bookings = session.exec(
         select(Booking)
         .where(Booking.stylist_id == stylist_id)
         .where(Booking.appointment_date == appointment_date)
-        .where(Booking.status.in_([BookingStatus.pending, BookingStatus.confirmed, BookingStatus.completed]))
+        .where(Booking.status.in_([BookingStatus.pending, BookingStatus.confirmed, BookingStatus.reschedule_requested, BookingStatus.completed]))
     ).all()
     
     conflicts = []
@@ -527,3 +532,194 @@ def get_available_time_slots(session: Session, stylist_id: int, appointment_date
         current_time += timedelta(minutes=slot_interval_minutes)
     
     return available_slots
+
+
+# Professional Settings CRUD operations
+def create_default_professional_settings(session: Session, stylist_id: int, professional_type: str = "stylist") -> ProfessionalSettings:
+    """Create default professional settings for a new professional"""
+    settings = ProfessionalSettings(
+        stylist_id=stylist_id if professional_type == "stylist" else None,
+        professional_type=professional_type,
+        cancellation_deadline_hours=24,
+        max_reschedules_allowed=2,
+        no_show_grace_period_minutes=60,
+        auto_confirm_bookings=False,
+        require_prepayment=False
+    )
+    session.add(settings)
+    session.commit()
+    session.refresh(settings)
+    return settings
+
+
+def get_professional_settings(session: Session, stylist_id: int, professional_type: str = "stylist") -> Optional[ProfessionalSettings]:
+    """Get professional settings for a stylist/professional"""
+    return session.exec(
+        select(ProfessionalSettings)
+        .where(ProfessionalSettings.stylist_id == stylist_id)
+        .where(ProfessionalSettings.professional_type == professional_type)
+    ).first()
+
+
+def update_professional_settings(session: Session, stylist_id: int, settings_data: dict, professional_type: str = "stylist") -> Optional[ProfessionalSettings]:
+    """Update professional settings"""
+    settings = get_professional_settings(session, stylist_id, professional_type)
+    
+    if not settings:
+        # Create default settings if they don't exist
+        settings = create_default_professional_settings(session, stylist_id, professional_type)
+    
+    # Update fields
+    for field, value in settings_data.items():
+        if hasattr(settings, field):
+            setattr(settings, field, value)
+    
+    settings.updated_at = datetime.now()
+    session.add(settings)
+    session.commit()
+    session.refresh(settings)
+    return settings
+
+
+# Booking Status Management
+def update_booking_status_with_history(session: Session, booking_id: int, new_status: BookingStatus, changed_by_user_id: int, reason: Optional[str] = None, stylist_id: Optional[int] = None) -> Optional[Booking]:
+    """Update booking status and record the change in history"""
+    
+    # Get the booking
+    booking = get_booking_by_id(session, booking_id, stylist_id)
+    if not booking:
+        return None
+    
+    old_status = booking.status
+    
+    # Update booking status
+    booking.status = new_status
+    booking.updated_at = datetime.now()
+    
+    # Add special handling for reschedule status
+    if new_status == BookingStatus.reschedule_requested:
+        booking.reschedule_requested_at = datetime.now()
+    
+    session.add(booking)
+    
+    # Record status change in history
+    history = BookingStatusHistory(
+        booking_id=booking_id,
+        old_status=old_status,
+        new_status=new_status,
+        changed_by_user_id=changed_by_user_id,
+        change_reason=reason
+    )
+    session.add(history)
+    
+    session.commit()
+    session.refresh(booking)
+    session.refresh(booking)
+    return booking
+
+
+def reschedule_booking(session: Session, booking_id: int, new_date: date, new_time: time, reschedule_reason: str, stylist_id: Optional[int] = None) -> Optional[Booking]:
+    """Reschedule a booking to a new date/time"""
+    
+    booking = get_booking_by_id(session, booking_id, stylist_id)
+    if not booking:
+        return None
+    
+    # Get professional settings to check reschedule limits
+    settings = get_professional_settings(session, booking.stylist_id)
+    max_reschedules = settings.max_reschedules_allowed if settings else 2
+    
+    if booking.reschedule_count >= max_reschedules:
+        raise ValueError(f"Maximum reschedules ({max_reschedules}) exceeded for this booking")
+    
+    # Check if new slot is available
+    is_available, availability_message = is_time_slot_available(
+        session, 
+        booking.stylist_id, 
+        new_date, 
+        new_time, 
+        booking.duration_minutes,
+        exclude_booking_id=booking_id
+    )
+    
+    if not is_available:
+        raise ValueError(f"New time slot not available: {availability_message}")
+    
+    # Store original appointment if this is the first reschedule
+    if booking.reschedule_count == 0:
+        booking.original_appointment_date = booking.appointment_date
+        booking.original_appointment_time = booking.appointment_time
+    
+    # Update booking with new time
+    booking.appointment_date = new_date
+    booking.appointment_time = new_time
+    booking.reschedule_count += 1
+    booking.reschedule_reason = reschedule_reason
+    booking.reschedule_requested_at = datetime.now()
+    booking.status = BookingStatus.confirmed  # Confirm the rescheduled booking
+    booking.updated_at = datetime.now()
+    
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+    return booking
+
+
+def get_booking_status_history(session: Session, booking_id: int) -> List[BookingStatusHistory]:
+    """Get status change history for a booking"""
+    return session.exec(
+        select(BookingStatusHistory)
+        .where(BookingStatusHistory.booking_id == booking_id)
+        .order_by(BookingStatusHistory.changed_at.asc())
+    ).all()
+
+
+def check_for_no_shows(session: Session) -> List[Booking]:
+    """
+    Check for bookings that should be marked as no-show
+    This can be run as a scheduled task
+    """
+    from datetime import datetime as dt, timedelta
+    
+    current_time = dt.now()
+    
+    # Get all confirmed bookings that are past their appointment time
+    past_bookings = session.exec(
+        select(Booking)
+        .where(Booking.status == BookingStatus.confirmed)
+        .where(Booking.appointment_date <= current_time.date())
+    ).all()
+    
+    no_show_bookings = []
+    
+    for booking in past_bookings:
+        # Get professional settings for grace period
+        settings = get_professional_settings(session, booking.stylist_id)
+        grace_period = settings.no_show_grace_period_minutes if settings else 60
+        
+        # Calculate appointment datetime
+        appointment_datetime = dt.combine(booking.appointment_date, booking.appointment_time)
+        grace_deadline = appointment_datetime + timedelta(minutes=grace_period)
+        
+        # Check if grace period has passed
+        if current_time > grace_deadline:
+            booking.status = BookingStatus.no_show
+            booking.updated_at = current_time
+            session.add(booking)
+            
+            # Record in history
+            history = BookingStatusHistory(
+                booking_id=booking.id,
+                old_status=BookingStatus.confirmed,
+                new_status=BookingStatus.no_show,
+                changed_by_user_id=1,  # System user ID (you might want to create a system user)
+                change_reason="Automatic no-show detection after grace period"
+            )
+            session.add(history)
+            
+            no_show_bookings.append(booking)
+    
+    if no_show_bookings:
+        session.commit()
+    
+    return no_show_bookings

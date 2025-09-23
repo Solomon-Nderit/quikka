@@ -18,6 +18,7 @@ class UserRole(str, enum.Enum):
 class BookingStatus(str, enum.Enum):
     pending = "pending"
     confirmed = "confirmed"
+    reschedule_requested = "reschedule_requested"
     completed = "completed"
     cancelled = "cancelled"
     no_show = "no_show"
@@ -73,6 +74,16 @@ class Booking(SQLModel, table=True):
     appointment_time: time
     duration_minutes: int = Field(default=60)  # Default 1 hour
     
+    # Reschedule tracking
+    original_appointment_date: Optional[date] = None
+    original_appointment_time: Optional[time] = None
+    reschedule_count: int = Field(default=0)  # Track number of reschedules
+    reschedule_reason: Optional[str] = None
+    reschedule_requested_at: Optional[datetime] = None
+    
+    # Professional type for future expansion
+    professional_type: str = Field(default="stylist")
+    
     # Pricing
     price: float = Field(default=0.0)  # Service price
     currency: str = Field(default="KES")  # Kenyan Shillings
@@ -80,6 +91,9 @@ class Booking(SQLModel, table=True):
     # Status and metadata
     status: BookingStatus = Field(default=BookingStatus.pending)
     notes: Optional[str] = None  # Additional notes from client or stylist
+    
+    # Cancellation rules (can be overridden by professional settings)
+    cancellation_deadline_hours: int = Field(default=24)
     
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.now)
@@ -106,6 +120,47 @@ class StylistAvailability(SQLModel, table=True):
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
+
+
+# Professional settings table - for business rules and preferences
+class ProfessionalSettings(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # Links to existing professional (stylist for now)
+    stylist_id: Optional[int] = Field(foreign_key="stylist.id", default=None)
+    # Future: therapist_id, trainer_id, etc.
+    
+    # Professional type identifier
+    professional_type: str = Field(default="stylist")
+    
+    # Cancellation and reschedule rules
+    cancellation_deadline_hours: int = Field(default=24, description="Hours before appointment when cancellation is allowed")
+    max_reschedules_allowed: int = Field(default=2, description="Maximum reschedules per booking")
+    no_show_grace_period_minutes: int = Field(default=60, description="Minutes after appointment time before marking as no-show")
+    
+    # Auto-confirmation settings (for future payment integration)
+    auto_confirm_bookings: bool = Field(default=False, description="Automatically confirm bookings without manual approval")
+    require_prepayment: bool = Field(default=False, description="Require payment before confirming booking")
+    
+    # Timestamps
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+
+
+# Booking status history table - tracks all status changes
+class BookingStatusHistory(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    booking_id: int = Field(foreign_key="booking.id")
+    
+    old_status: Optional[BookingStatus] = None
+    new_status: BookingStatus
+    
+    # Who made the change
+    changed_by_user_id: int = Field(foreign_key="user.id")
+    change_reason: Optional[str] = None
+    
+    # Timestamp
+    changed_at: datetime = Field(default_factory=datetime.now)
  
 
 # Request schemas

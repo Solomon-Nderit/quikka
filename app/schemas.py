@@ -142,6 +142,9 @@ class BookingUpdate(BaseModel):
     
     status: Optional[BookingStatus] = Field(default=None, description="Booking status")
     notes: Optional[str] = Field(default=None, description="Additional notes")
+    
+    # Reschedule fields
+    reschedule_reason: Optional[str] = Field(default=None, description="Reason for reschedule request")
 
     @validator('appointment_date')
     def validate_appointment_date(cls, v):
@@ -150,6 +153,43 @@ class BookingUpdate(BaseModel):
             if v < dt_date.today():
                 raise ValueError('Appointment date cannot be in the past')
         return v
+
+
+# New schema for status updates
+class BookingStatusUpdate(BaseModel):
+    status: BookingStatus = Field(description="New booking status")
+    reason: Optional[str] = Field(default=None, description="Reason for status change")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "status": "completed",
+                "reason": "Service completed successfully"
+            }
+        }
+
+
+# New schema for reschedule requests
+class BookingRescheduleRequest(BaseModel):
+    new_appointment_date: date = Field(description="Requested new date")
+    new_appointment_time: time = Field(description="Requested new time")
+    reschedule_reason: str = Field(description="Reason for reschedule request")
+
+    @validator('new_appointment_date')
+    def validate_new_appointment_date(cls, v):
+        from datetime import date as dt_date
+        if v < dt_date.today():
+            raise ValueError('New appointment date cannot be in the past')
+        return v
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "new_appointment_date": "2025-09-25",
+                "new_appointment_time": "15:00",
+                "reschedule_reason": "Client has a conflict with original time"
+            }
+        }
 
 
 class BookingPublic(BaseModel):
@@ -167,11 +207,23 @@ class BookingPublic(BaseModel):
     appointment_time: time
     duration_minutes: int
     
+    # Reschedule information
+    original_appointment_date: Optional[date]
+    original_appointment_time: Optional[time]
+    reschedule_count: int
+    reschedule_reason: Optional[str]
+    
+    # Professional type
+    professional_type: str
+    
     price: float
     currency: str
     
     status: BookingStatus
     notes: Optional[str]
+    
+    # Cancellation rules
+    cancellation_deadline_hours: int
     
     created_at: datetime
     updated_at: datetime

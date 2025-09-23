@@ -116,6 +116,7 @@
                   <th>Date</th>
                   <th>Time</th>
                   <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="bookingsTableBody">
@@ -127,6 +128,41 @@
       </div>
     </div>
   </main>
+
+  <!-- Reschedule Modal -->
+  <div id="rescheduleModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Reschedule Appointment</h3>
+        <button class="modal-close" onclick="closeRescheduleModal()">&times;</button>
+      </div>
+      
+      <form id="rescheduleForm">
+        <div class="form-group">
+          <label for="newDate">New Date</label>
+          <input type="date" id="newDate" name="new_appointment_date" required onchange="loadAvailableSlots()">
+        </div>
+        
+        <div class="form-group">
+          <label for="newTimeSlot">Available Time Slots</label>
+          <select id="newTimeSlot" name="new_appointment_time" required>
+            <option value="">Select a date first...</option>
+          </select>
+          <div id="slotsLoading" class="loading-slots" style="display: none;">Loading available slots...</div>
+        </div>
+        
+        <div class="form-group">
+          <label for="rescheduleReason">Reason for Reschedule</label>
+          <textarea id="rescheduleReason" name="reschedule_reason" rows="3" required placeholder="Please provide a reason for the reschedule..."></textarea>
+        </div>
+        
+        <div class="modal-actions">
+          <button type="button" class="btn-modal btn-modal-secondary" onclick="closeRescheduleModal()">Cancel</button>
+          <button type="submit" class="btn-modal btn-modal-primary">Reschedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="/frontend/js/dashboard.js"></script>
 </body>

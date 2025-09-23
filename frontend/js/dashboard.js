@@ -61,7 +61,12 @@ function generateCalendar() {
   const month = currentDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = new Date();
+  
+  // Get today's date components to avoid timezone issues
+  const now = new Date();
+  const todayYear = now.getFullYear();
+  const todayMonth = now.getMonth();
+  const todayDate = now.getDate();
   
   // Add empty cells for days before the first day of the month
   for (let i = 0; i < firstDay; i++) {
@@ -76,8 +81,8 @@ function generateCalendar() {
     dayElement.className = 'calendar-day';
     dayElement.textContent = day;
     
-    const currentDateCheck = new Date(year, month, day);
-    if (currentDateCheck.toDateString() === today.toDateString()) {
+    // Check if this is today by comparing year, month, and date directly
+    if (year === todayYear && month === todayMonth && day === todayDate) {
       dayElement.classList.add('today');
     }
     
@@ -100,16 +105,24 @@ function generateCalendar() {
 }
 
 // API request helper with authentication
-async function authenticatedRequest(url) {
+async function authenticatedRequest(url, method = 'GET', data = null) {
   const token = TokenManager.getToken();
   
-  const response = await fetch(url, {
-    method: 'GET',
+  const requestOptions = {
+    method: method,
     headers: { 
       'Authorization': `Bearer ${token}`,
       'Accept': 'application/json'
     }
-  });
+  };
+  
+  // Add Content-Type and body for non-GET requests
+  if (data && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+    requestOptions.headers['Content-Type'] = 'application/json';
+    requestOptions.body = JSON.stringify(data);
+  }
+  
+  const response = await fetch(url, requestOptions);
   
   if (response.status === 401) {
     TokenManager.removeToken();
@@ -326,7 +339,7 @@ function updateBookingsTable(bookings) {
   if (!bookings || bookings.length === 0) {
     tableBody.innerHTML = `
       <tr>
-        <td colspan="5" style="text-align: center; padding: 2rem; color: #666;">
+        <td colspan="6" style="text-align: center; padding: 2rem; color: #666;">
           No upcoming bookings found
         </td>
       </tr>
@@ -336,16 +349,237 @@ function updateBookingsTable(bookings) {
   
   bookings.forEach(booking => {
     const row = document.createElement('tr');
+    
+    // Generate action buttons based on booking status
+    const actionButtons = generateActionButtons(booking);
+    
     row.innerHTML = `
       <td>${booking.client_name}</td>
       <td>${booking.service_name}</td>
       <td>${new Date(booking.appointment_date).toLocaleDateString()}</td>
       <td>${booking.appointment_time}</td>
       <td><span class="status-badge status-${booking.status.toLowerCase()}">${booking.status}</span></td>
+      <td>
+        <div class="booking-actions">
+          ${actionButtons}
+        </div>
+      </td>
     `;
     tableBody.appendChild(row);
   });
 }
+
+function generateActionButtons(booking) {
+  const status = booking.status.toLowerCase();
+  let buttons = '';
+  
+  switch (status) {
+    case 'pending':
+      buttons = `
+        <button class="btn-action btn-confirm" onclick="updateBookingStatus(${booking.id}, 'confirmed')">Confirm</button>
+        <button class="btn-action btn-cancel" onclick="updateBookingStatus(${booking.id}, 'cancelled')">Cancel</button>
+        <button class="btn-action btn-reschedule" onclick="openRescheduleModal(${booking.id})">Reschedule</button>
+      `;
+      break;
+      
+    case 'confirmed':
+      buttons = `
+        <button class="btn-action btn-complete" onclick="updateBookingStatus(${booking.id}, 'completed')">Complete</button>
+        <button class="btn-action btn-cancel" onclick="updateBookingStatus(${booking.id}, 'cancelled')">Cancel</button>
+        <button class="btn-action btn-reschedule" onclick="openRescheduleModal(${booking.id})">Reschedule</button>
+      `;
+      break;
+      
+    case 'reschedule_requested':
+      buttons = `
+        <button class="btn-action btn-confirm" onclick="updateBookingStatus(${booking.id}, 'confirmed')">Approve</button>
+        <button class="btn-action btn-cancel" onclick="updateBookingStatus(${booking.id}, 'cancelled')">Decline</button>
+      `;
+      break;
+      
+    case 'completed':
+      buttons = `<span style="color: #666; font-size: 0.75rem;">Completed</span>`;
+      break;
+      
+    case 'cancelled':
+      buttons = `<span style="color: #666; font-size: 0.75rem;">Cancelled</span>`;
+      break;
+      
+    case 'no_show':
+      buttons = `<span style="color: #666; font-size: 0.75rem;">No Show</span>`;
+      break;
+      
+    default:
+      buttons = `<span style="color: #666; font-size: 0.75rem;">-</span>`;
+  }
+  
+  return buttons;
+}
+
+// Booking status management functions
+async function updateBookingStatus(bookingId, newStatus) {
+  const confirmMessage = `Are you sure you want to mark this booking as ${newStatus}?`;
+  
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+  
+  try {
+    const response = await authenticatedRequest(`http://localhost:8000/api/bookings/${bookingId}/status`, 'PUT', {
+      status: newStatus,
+      reason: `Status updated by stylist to ${newStatus}`
+    });
+    
+    alert(`Booking status updated to ${newStatus} successfully!`);
+    
+    // Reload the bookings table
+    loadDashboard();
+    
+  } catch (error) {
+    console.error('Failed to update booking status:', error);
+    alert('Failed to update booking status: ' + error.message);
+  }
+}
+
+// Reschedule modal functionality
+let currentRescheduleBookingId = null;
+
+function openRescheduleModal(bookingId) {
+  currentRescheduleBookingId = bookingId;
+  const modal = document.getElementById('rescheduleModal');
+  modal.classList.add('active');
+  
+  // Set minimum date to tomorrow without timezone issues
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  
+  // Format date as YYYY-MM-DD without timezone conversion
+  const year = tomorrow.getFullYear();
+  const month = (tomorrow.getMonth() + 1).toString().padStart(2, '0');
+  const day = tomorrow.getDate().toString().padStart(2, '0');
+  const tomorrowString = `${year}-${month}-${day}`;
+  
+  document.getElementById('newDate').min = tomorrowString;
+  
+  // Reset the time slot dropdown
+  const timeSlotSelect = document.getElementById('newTimeSlot');
+  timeSlotSelect.innerHTML = '<option value="">Select a date first...</option>';
+}
+
+function closeRescheduleModal() {
+  const modal = document.getElementById('rescheduleModal');
+  modal.classList.remove('active');
+  currentRescheduleBookingId = null;
+  
+  // Reset form
+  document.getElementById('rescheduleForm').reset();
+  const timeSlotSelect = document.getElementById('newTimeSlot');
+  timeSlotSelect.innerHTML = '<option value="">Select a date first...</option>';
+}
+
+// Load available slots for reschedule modal when date is selected
+async function loadAvailableSlots() {
+  const dateInput = document.getElementById('newDate');
+  const timeSlotSelect = document.getElementById('newTimeSlot');
+  const slotsLoading = document.getElementById('slotsLoading');
+  
+  if (!dateInput.value) {
+    timeSlotSelect.innerHTML = '<option value="">Select a date first...</option>';
+    return;
+  }
+  
+  // Show loading state
+  timeSlotSelect.innerHTML = '<option value="">Loading...</option>';
+  timeSlotSelect.disabled = true;
+  slotsLoading.style.display = 'block';
+  
+  try {
+    // Get current user to extract stylist ID
+    const userResponse = await authenticatedRequest('http://localhost:8000/api/profile');
+    const stylistId = userResponse.user.stylist_profile?.id;
+    
+    if (!stylistId) {
+      timeSlotSelect.innerHTML = '<option value="">Only stylists can reschedule</option>';
+      slotsLoading.style.display = 'none';
+      return;
+    }
+    
+    // Load available time slots for the selected date
+    const availabilityResponse = await authenticatedRequest(
+      `http://localhost:8000/api/stylists/${stylistId}/available-times?appointment_date=${dateInput.value}`
+    );
+    
+    // Populate the dropdown with available slots
+    timeSlotSelect.innerHTML = '';
+    
+    if (availabilityResponse.available_slots && availabilityResponse.available_slots.length > 0) {
+      // Add default option
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = 'Select a time slot...';
+      timeSlotSelect.appendChild(defaultOption);
+      
+      // Add available slots
+      availabilityResponse.available_slots.forEach(slot => {
+        const option = document.createElement('option');
+        option.value = slot.start_time;
+        option.textContent = `${slot.start_time} - ${slot.end_time}`;
+        timeSlotSelect.appendChild(option);
+      });
+    } else {
+      timeSlotSelect.innerHTML = '<option value="">No available slots for this date</option>';
+    }
+    
+  } catch (error) {
+    console.error('Failed to load available slots:', error);
+    timeSlotSelect.innerHTML = '<option value="">Failed to load slots</option>';
+  } finally {
+    timeSlotSelect.disabled = false;
+    slotsLoading.style.display = 'none';
+  }
+}
+
+// Handle reschedule form submission
+document.addEventListener('DOMContentLoaded', function() {
+  const rescheduleForm = document.getElementById('rescheduleForm');
+  if (rescheduleForm) {
+    rescheduleForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      if (!currentRescheduleBookingId) {
+        alert('No booking selected for rescheduling');
+        return;
+      }
+      
+      const formData = new FormData(rescheduleForm);
+      const rescheduleData = {
+        new_appointment_date: formData.get('new_appointment_date'),
+        new_appointment_time: formData.get('new_appointment_time'),
+        reschedule_reason: formData.get('reschedule_reason')
+      };
+      
+      try {
+        const response = await authenticatedRequest(
+          `http://localhost:8000/api/bookings/${currentRescheduleBookingId}/reschedule`, 
+          'POST', 
+          rescheduleData
+        );
+        
+        alert('Booking rescheduled successfully!');
+        closeRescheduleModal();
+        loadDashboard(); // Reload the bookings
+        
+      } catch (error) {
+        console.error('Failed to reschedule booking:', error);
+        alert('Failed to reschedule booking: ' + error.message);
+      }
+    });
+  }
+  
+  // Initialize dashboard
+  updateCalendarDisplay();
+  loadDashboard();
+});
 
 // Navigation functions
 function navigateTo(section) {
@@ -372,9 +606,3 @@ async function logout() {
     window.location.href = '/auth';
   }
 }
-
-// Initialize the page when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-  updateCalendarDisplay();
-  loadDashboard();
-});

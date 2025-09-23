@@ -1,3 +1,9 @@
 1. Fix user account creation date not showing.
 2. Create a Bookings table with stylist booking dates
 3. Create Booking Loop
+
+5. Database of user bookings.
+
+UI:
+4. Make the availability to be a scrollable element.
+5.Make the UI of the confirmation/cancellation/rescheduling tool better.
