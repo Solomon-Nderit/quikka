@@ -1,10 +1,11 @@
 from typing import Annotated, Generator
+import os
 
 from fastapi import Depends
 from sqlmodel import Session, SQLModel, create_engine
 
-
-sqlite_file_name = "database.db"
+# Use absolute path to ensure we're using the app database
+sqlite_file_name = os.path.join(os.path.dirname(__file__), "database.db")
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
 # Needed for SQLite when using multiple threads (e.g., Uvicorn reload)

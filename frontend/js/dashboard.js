@@ -88,6 +88,11 @@ function generateCalendar() {
         el.classList.remove('selected'));
       // Add selection to clicked day
       this.classList.add('selected');
+      
+      // Load time slots for selected date - create date string directly to avoid timezone issues
+      const dateString = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+      const selectedDate = new Date(dateString + 'T12:00:00'); // Use noon to avoid timezone shifts
+      loadTimeSlotsForDate(selectedDate);
     });
     
     grid.appendChild(dayElement);
@@ -134,6 +139,9 @@ async function loadDashboard() {
     const bookingsResponse = await authenticatedRequest('http://localhost:8000/api/bookings');
     updateBookingsTable(bookingsResponse.bookings);
     
+    // Load time slots for today by default
+    loadTimeSlotsForDate(new Date());
+    
     // Hide loading, show content
     document.getElementById('loading').style.display = 'none';
     document.getElementById('dashboardContent').style.display = 'block';
@@ -144,6 +152,165 @@ async function loadDashboard() {
     document.getElementById('error').style.display = 'block';
     document.querySelector('#error p').textContent = 'Failed to load dashboard: ' + error.message;
   }
+}
+
+// Load time slots for a specific date
+async function loadTimeSlotsForDate(selectedDate) {
+  // Create date string directly to avoid timezone conversion issues
+  const year = selectedDate.getFullYear();
+  const month = (selectedDate.getMonth() + 1).toString().padStart(2, '0');
+  const day = selectedDate.getDate().toString().padStart(2, '0');
+  const dateString = `${year}-${month}-${day}`;
+  
+  const displayDate = selectedDate.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  
+  // Update the date display
+  document.getElementById('selectedDateDisplay').textContent = displayDate;
+  
+  // Show loading state
+  const container = document.getElementById('timeSlotsContainer');
+  container.innerHTML = '<p class="loading-slots">Loading time slots...</p>';
+  
+  try {
+    // Get current user to extract stylist ID
+    const userResponse = await authenticatedRequest('http://localhost:8000/api/profile');
+    const stylistId = userResponse.user.stylist_profile?.id;
+    
+    if (!stylistId) {
+      container.innerHTML = '<p class="loading-slots">Only stylists can view time slots</p>';
+      return;
+    }
+    
+    // Load available time slots
+    const availabilityResponse = await authenticatedRequest(
+      `http://localhost:8000/api/stylists/${stylistId}/available-times?appointment_date=${dateString}`
+    );
+    
+    // Load bookings for this date
+    const bookingsResponse = await authenticatedRequest('http://localhost:8000/api/bookings');
+    
+    // Debug: Log all bookings to see their format
+    console.log('All bookings:', bookingsResponse.bookings);
+    console.log('Looking for date:', dateString);
+    
+    const dayBookings = bookingsResponse.bookings.filter(booking => {
+      // Log each booking date for comparison
+      console.log(`Booking date: "${booking.appointment_date}" vs Target: "${dateString}"`);
+      
+      // Try multiple date format comparisons
+      const bookingDate = booking.appointment_date;
+      
+      // Handle different date formats
+      let matches = false;
+      
+      // Direct string match
+      if (bookingDate === dateString) {
+        matches = true;
+      }
+      
+      // Try parsing both dates and comparing
+      const bookingDateObj = new Date(bookingDate);
+      const targetDateObj = new Date(dateString);
+      
+      if (bookingDateObj.toISOString().split('T')[0] === targetDateObj.toISOString().split('T')[0]) {
+        matches = true;
+      }
+      
+      if (matches) {
+        console.log(`✓ MATCH FOUND: ${booking.client_name} at ${booking.appointment_time}`);
+      }
+      
+      return matches;
+    });
+    
+    console.log(`Found ${dayBookings.length} bookings for ${dateString}:`, dayBookings);
+    
+    displayTimeSlots(availabilityResponse.available_slots, dayBookings);
+    
+  } catch (error) {
+    console.error('Failed to load time slots:', error);
+    container.innerHTML = `<p class="loading-slots">Failed to load time slots: ${error.message}</p>`;
+  }
+}
+
+// Display time slots with booking status
+function displayTimeSlots(availableSlots, bookings) {
+  const container = document.getElementById('timeSlotsContainer');
+  
+  if (!availableSlots || availableSlots.length === 0) {
+    container.innerHTML = '<p class="loading-slots">No available time slots for this date</p>';
+    return;
+  }
+  
+  // Debug: Log the data formats
+  console.log('Available slots format:', availableSlots[0]);
+  console.log('Bookings passed to displayTimeSlots:', bookings);
+  console.log('Number of bookings for this date:', bookings.length);
+  
+  if (bookings.length > 0) {
+    console.log('First booking format:', bookings[0]);
+  }
+  
+  // Create a map of booked times for quick lookup
+  const bookedTimes = new Map();
+  bookings.forEach(booking => {
+    // Normalize booking time to HH:MM format
+    let timeKey;
+    
+    // Handle different time formats
+    if (booking.appointment_time.includes('AM') || booking.appointment_time.includes('PM')) {
+      // Convert "10:00 AM" to "10:00"
+      const time12 = booking.appointment_time;
+      const [time, period] = time12.split(' ');
+      const [hours, minutes] = time.split(':');
+      let hour24 = parseInt(hours);
+      
+      if (period === 'PM' && hour24 !== 12) {
+        hour24 += 12;
+      } else if (period === 'AM' && hour24 === 12) {
+        hour24 = 0;
+      }
+      
+      timeKey = `${hour24.toString().padStart(2, '0')}:${minutes}`;
+    } else if (booking.appointment_time.includes(':')) {
+      // Handle "HH:MM:SS" or "HH:MM" format
+      timeKey = booking.appointment_time.substring(0, 5); // Get HH:MM
+    } else {
+      timeKey = booking.appointment_time;
+    }
+    
+    console.log(`Booking time: ${booking.appointment_time} -> ${timeKey}`);
+    bookedTimes.set(timeKey, booking);
+  });
+  
+  container.innerHTML = '';
+  
+  availableSlots.forEach(slot => {
+    const slotElement = document.createElement('div');
+    const booking = bookedTimes.get(slot.start_time);
+    const isBooked = !!booking;
+    
+    console.log(`Slot ${slot.start_time}: ${isBooked ? 'BOOKED' : 'available'}`);
+    
+    slotElement.className = `time-slot ${isBooked ? 'booked' : 'available'}`;
+    
+    slotElement.innerHTML = `
+      <div class="slot-info">
+        <div class="slot-time">${slot.start_time} - ${slot.end_time}</div>
+        ${isBooked ? `<div class="slot-client">${booking.client_name}</div>` : ''}
+      </div>
+      <div class="slot-status ${isBooked ? 'booked' : 'available'}">
+        ${isBooked ? 'Booked' : 'Available'}
+      </div>
+    `;
+    
+    container.appendChild(slotElement);
+  });
 }
 
 function updateUserProfile(user) {
