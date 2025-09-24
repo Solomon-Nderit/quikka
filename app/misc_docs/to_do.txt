@@ -3,7 +3,9 @@
 3. Create Booking Loop
 
 5. Database of user bookings.
+6. Should we work with slotted times or any time.
 
 UI:
 4. Make the availability to be a scrollable element.
 5.Make the UI of the confirmation/cancellation/rescheduling tool better.
+

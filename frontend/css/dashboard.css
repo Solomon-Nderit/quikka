@@ -14,7 +14,7 @@ body {
 
 /* Sidebar Styles */
 .sidebar {
-  width: 250px;
+  width: 60px; /* Collapsed by default */
   background: white;
   border-right: 1px solid #e1e5e9;
   display: flex;
@@ -22,17 +22,53 @@ body {
   position: fixed;
   height: 100vh;
   overflow-y: auto;
+  transition: width 0.3s ease;
+  z-index: 100;
+}
+
+.sidebar.expanded {
+  width: 250px; /* Expanded width */
 }
 
 .sidebar-header {
-  padding: 1.5rem;
+  padding: 1rem;
   border-bottom: 1px solid #e1e5e9;
+  position: relative;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #6c757d;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.sidebar-toggle:hover {
+  background: #f8f9fa;
+  color: #333;
+}
+
+.sidebar:not(.expanded) .sidebar-toggle {
+  right: 50%;
+  transform: translateX(50%);
 }
 
 .user-profile {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  justify-content: center;
+}
+
+.sidebar.expanded .user-profile {
+  justify-content: flex-start;
 }
 
 .user-avatar {
@@ -46,6 +82,16 @@ body {
   color: white;
   font-weight: bold;
   font-size: 1.1rem;
+}
+
+.user-info {
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.sidebar:not(.expanded) .user-info {
+  opacity: 0;
+  display: none;
 }
 
 .user-info h3 {
@@ -67,7 +113,7 @@ body {
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1rem;
   color: #6c757d;
   text-decoration: none;
   transition: all 0.2s;
@@ -76,6 +122,12 @@ body {
   background: none;
   width: 100%;
   text-align: left;
+  justify-content: center;
+}
+
+.sidebar.expanded .nav-item {
+  justify-content: flex-start;
+  padding: 0.75rem 1.5rem;
 }
 
 .nav-item:hover {
@@ -90,17 +142,41 @@ body {
 }
 
 .nav-icon {
-  margin-right: 0.75rem;
+  margin-right: 0;
   font-size: 1.1rem;
+  transition: margin 0.3s ease;
+}
+
+.sidebar.expanded .nav-icon {
+  margin-right: 0.75rem;
+}
+
+.nav-text {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  white-space: nowrap;
+}
+
+.sidebar.expanded .nav-text {
+  opacity: 1;
+}
+
+.sidebar:not(.expanded) .nav-text {
+  display: none;
 }
 
 /* Main Content */
 .main-content {
-  margin-left: 250px;
+  margin-left: 60px; /* Collapsed sidebar width */
   flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  transition: margin-left 0.3s ease;
+}
+
+.sidebar.expanded + .main-content {
+  margin-left: 250px; /* Expanded sidebar width */
 }
 
 .content-header {
@@ -121,26 +197,29 @@ body {
 .content-body {
   padding: 2rem;
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 350px; /* Reduced right panel width to give more space to bookings */
-  gap: 2rem;
-  overflow-x: auto; /* Allow horizontal scrolling if needed */
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 /* Calendar Styles */
 .calendar-section {
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid #e1e5e9;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .calendar-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   padding: 1rem;
   border-bottom: 1px solid #e1e5e9;
+  background: #f8f9fa;
 }
 
 .calendar-nav {
@@ -227,13 +306,20 @@ body {
 .bookings-section {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0; /* Important for flex scrolling */
 }
 
 .upcoming-bookings {
   background: white;
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid #e1e5e9;
   overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .bookings-header {
@@ -241,12 +327,22 @@ body {
   border-bottom: 1px solid #e1e5e9;
   font-weight: 600;
   font-size: 1.1rem;
+  background: #f8f9fa;
+  flex-shrink: 0;
+}
+
+.bookings-table-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  max-height: 400px;
 }
 
 .bookings-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed; /* Ensures consistent column widths */
+  table-layout: fixed;
 }
 
 .bookings-table th {
@@ -270,7 +366,7 @@ body {
 /* Specific column widths for better layout */
 .bookings-table th:nth-child(1), /* Client */
 .bookings-table td:nth-child(1) {
-  width: 15%;
+  width: 20%;
 }
 
 .bookings-table th:nth-child(2), /* Service */
@@ -280,23 +376,18 @@ body {
 
 .bookings-table th:nth-child(3), /* Date */
 .bookings-table td:nth-child(3) {
-  width: 12%;
+  width: 15%;
 }
 
 .bookings-table th:nth-child(4), /* Time */
 .bookings-table td:nth-child(4) {
-  width: 10%;
-}
-
-.bookings-table th:nth-child(5), /* Status */
-.bookings-table td:nth-child(5) {
   width: 15%;
 }
 
-.bookings-table th:nth-child(6), /* Actions */
-.bookings-table td:nth-child(6) {
-  width: 28%;
-  min-width: 200px; /* Ensure enough space for buttons */
+.bookings-table th:nth-child(5), /* Status with Actions */
+.bookings-table td:nth-child(5) {
+  width: 30%;
+  min-width: 200px;
 }
 
 .bookings-table tr:hover {
@@ -343,30 +434,49 @@ body {
   color: #424242;
 }
 
+/* Combined Status and Actions Cell */
+.status-actions-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+}
+
+.status-actions-cell .status-badge {
+  flex-shrink: 0;
+}
+
+.status-actions-cell .booking-actions {
+  flex-shrink: 0;
+  min-height: auto;
+}
+
 /* Action Buttons */
 .booking-actions {
   display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.3rem;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: flex-start;
-  min-height: 40px; /* Ensure consistent height */
+  justify-content: flex-end;
+  min-height: auto;
 }
 
 .btn-action {
-  padding: 0.375rem 0.75rem;
+  padding: 0.3rem 0.6rem;
   border: none;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap; /* Prevent text wrapping */
-  flex-shrink: 0; /* Prevent buttons from shrinking */
-  min-width: 70px; /* Ensure minimum button width */
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 55px;
   text-align: center;
+  line-height: 1.1;
 }
 
 .btn-action:hover {
@@ -554,25 +664,28 @@ body {
   margin: 1rem;
 }
 
-/* Time Slots Section */
-.time-slots-section {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+/* Scrollbar styles for bookings table */
+.bookings-table-container::-webkit-scrollbar {
+  width: 8px;
 }
 
-.section-header h3 {
-  margin: 0 0 1rem 0;
-  color: #333;
-  font-size: 1.25rem;
+.bookings-table-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
 }
 
-.time-slots-container {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  min-height: 100px;
+.bookings-table-container::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+.bookings-table-container::-webkit-scrollbar-thumb:hover {
+  background: #999;
+}
+
+.bookings-table-container {
+  scrollbar-width: thin;
+  scrollbar-color: #ccc #f1f1f1;
 }
 
 .time-slot {
@@ -646,11 +759,19 @@ body {
 /* Responsive Design */
 @media (max-width: 768px) {
   .sidebar {
-    width: 60px;
+    width: 60px; /* Always collapsed on mobile */
+  }
+  
+  .sidebar.expanded {
+    width: 60px; /* Force collapsed on mobile */
   }
   
   .main-content {
     margin-left: 60px;
+  }
+  
+  .sidebar.expanded + .main-content {
+    margin-left: 60px; /* Keep collapsed margin on mobile */
   }
   
   .content-body {
@@ -659,27 +780,41 @@ body {
   }
   
   .user-info, .nav-text {
-    display: none;
+    display: none !important; /* Force hide on mobile */
   }
   
-  /* Make action buttons stack vertically on mobile */
+  .sidebar-toggle {
+    display: none; /* Hide toggle on mobile since sidebar stays collapsed */
+  }
+  
+  /* Make action buttons wrap on mobile but stay compact */
   .booking-actions {
-    flex-direction: column;
-    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 0.2rem;
   }
   
   .btn-action {
-    width: 100%;
-    margin-bottom: 0.25rem;
+    flex: 1;
+    min-width: 40px;
+    font-size: 0.55rem;
+    padding: 0.2rem 0.3rem;
   }
   
-  /* Make bookings table scrollable on mobile */
-  .bookings-section {
-    overflow-x: auto;
+  /* Make status-actions cell stack on mobile */
+  .status-actions-cell {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
   
-  .bookings-table {
-    min-width: 600px; /* Ensure table doesn't compress too much */
+  /* Make bookings table container handle mobile properly */
+  .bookings-table-container {
+    max-height: 300px; /* Shorter on mobile */
+  }
+  
+  .content-body {
+    max-width: none; /* Remove width constraint on mobile */
+    padding: 1rem; /* Reduce padding on mobile */
   }
 }
 
@@ -690,11 +825,12 @@ body {
   }
   
   .booking-actions {
-    gap: 0.75rem; /* More space between buttons */
+    gap: 0.3rem; /* Consistent spacing */
   }
   
   .btn-action {
-    min-width: 80px; /* Larger buttons on big screens */
-    padding: 0.5rem 1rem;
+    min-width: 55px; /* Slightly larger but still compact */
+    padding: 0.3rem 0.6rem;
+    font-size: 0.65rem;
   }
 }
