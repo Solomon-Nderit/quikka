@@ -11,6 +11,7 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
+      <button class="sidebar-toggle" onclick="toggleSidebar()">☰</button>
       <div class="user-profile">
         <div class="user-avatar" id="userAvatar">S</div>
         <div class="user-info">
@@ -93,36 +94,27 @@
         
         <!-- Bookings Section -->
         <div class="bookings-section">
-          <!-- Time Slots for Selected Date -->
-          <div class="time-slots-section" style="margin-bottom: 2rem;">
-            <div class="section-header">
-              <h3>Time Slots for <span id="selectedDateDisplay">Today</span></h3>
-            </div>
-            <div id="timeSlotsContainer" class="time-slots-container">
-              <p class="loading-slots">Select a date to view available time slots</p>
-            </div>
-          </div>
-          
           <div class="upcoming-bookings">
             <div class="bookings-header">
               Upcoming Bookings
             </div>
             
-            <table class="bookings-table">
-              <thead>
-                <tr>
-                  <th>Client</th>
-                  <th>Service</th>
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="bookingsTableBody">
-                <!-- Bookings will be populated by JavaScript -->
-              </tbody>
-            </table>
+            <div class="bookings-table-container">
+              <table class="bookings-table">
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th>Service</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="bookingsTableBody">
+                  <!-- Bookings will be populated by JavaScript -->
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
