@@ -53,6 +53,12 @@ async def dashboard_page():
     return FileResponse(str(TEMPLATES_DIR / "dashboard.html"))
 
 
+@app.get("/book/{stylist_id}")
+async def booking_page(stylist_id: int):
+    """Serve the public booking page for a specific stylist"""
+    return FileResponse(str(TEMPLATES_DIR / "booking.html"))
+
+
 @app.get("/api")
 async def api_root():
     """API status endpoint"""

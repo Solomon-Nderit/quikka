@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Appointment - Quikka</title>
+  <link rel="stylesheet" href="/frontend/css/styles.css" />
+  <link rel="stylesheet" href="/frontend/css/booking.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="booking-header">
+    <div class="container">
+      <div class="header-content">
+        <a href="/" class="logo">
+          <img src="/frontend/public/landing_page.png" alt="Quikka" class="logo-img" />
+          <span>Quikka</span>
+        </a>
+        <div class="header-info">
+          <span class="booking-step">Book Appointment</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Loading State -->
+  <div id="loadingState" class="loading-container">
+    <div class="loading-spinner"></div>
+    <p>Loading stylist information...</p>
+  </div>
+
+  <!-- Error State -->
+  <div id="errorState" class="error-container" style="display: none;">
+    <div class="error-content">
+      <div class="error-icon">⚠️</div>
+      <h2>Stylist Not Found</h2>
+      <p>The stylist you're looking for doesn't exist or may have been removed.</p>
+      <a href="/" class="btn btn-primary">Back to Home</a>
+    </div>
+  </div>
+
+  <!-- Main Booking Content -->
+  <main id="bookingContent" class="booking-main" style="display: none;">
+    <div class="container">
+      <div class="booking-layout">
+        
+        <!-- Stylist Profile Section -->
+        <aside class="stylist-profile">
+          <div class="profile-card">
+            <div class="profile-image">
+              <img id="stylistImage" src="/frontend/public/landing_page.png" alt="Stylist" />
+            </div>
+            <div class="profile-info">
+              <h2 id="stylistBusinessName">Loading...</h2>
+              <p class="stylist-name">by <span id="stylistName">Loading...</span></p>
+              <p id="stylistBio" class="stylist-bio">Loading...</p>
+              <div class="contact-info">
+                <p class="phone">📞 <span id="stylistPhone">Loading...</span></p>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Booking Form Section -->
+        <section class="booking-form-section">
+          <div class="form-container">
+            <h1>Book Your Appointment</h1>
+            <p class="form-subtitle">Fill out the details below to schedule your appointment.</p>
+
+            <form id="bookingForm" class="booking-form">
+              <!-- Service Selection -->
+              <div class="form-section">
+                <h3 class="section-title">Service Details</h3>
+                <div class="form-group">
+                  <label for="serviceName">Service Type</label>
+                  <input 
+                    type="text" 
+                    id="serviceName" 
+                    name="service_name" 
+                    placeholder="e.g., Haircut & Style, Manicure, Facial" 
+                    required 
+                    class="form-input"
+                  />
+                </div>
+                <div class="form-group">
+                  <label for="serviceDescription">Service Description (Optional)</label>
+                  <textarea 
+                    id="serviceDescription" 
+                    name="service_description" 
+                    placeholder="Any specific requirements or details..." 
+                    rows="3"
+                    class="form-input"
+                  ></textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="duration">Duration (minutes)</label>
+                    <select id="duration" name="duration_minutes" required class="form-input">
+                      <option value="">Select duration</option>
+                      <option value="30">30 minutes</option>
+                      <option value="60">1 hour</option>
+                      <option value="90">1.5 hours</option>
+                      <option value="120">2 hours</option>
+                      <option value="150">2.5 hours</option>
+                      <option value="180">3 hours</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="price">Price (KES)</label>
+                    <input 
+                      type="number" 
+                      id="price" 
+                      name="price" 
+                      placeholder="0.00" 
+                      step="50" 
+                      min="0" 
+                      required 
+                      class="form-input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Date & Time Selection -->
+              <div class="form-section">
+                <h3 class="section-title">Select Date & Time</h3>
+                <div class="form-group">
+                  <label for="appointmentDate">Appointment Date</label>
+                  <input 
+                    type="date" 
+                    id="appointmentDate" 
+                    name="appointment_date" 
+                    required 
+                    class="form-input"
+                    min=""
+                  />
+                </div>
+                
+                <!-- Available Time Slots -->
+                <div class="form-group">
+                  <label>Available Time Slots</label>
+                  <div id="timeSlotsContainer" class="time-slots">
+                    <p class="slots-placeholder">Please select a date and duration first</p>
+                  </div>
+                  <div id="timeSlotsLoading" class="slots-loading" style="display: none;">
+                    <div class="loading-spinner small"></div>
+                    <span>Loading available slots...</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Client Information -->
+              <div class="form-section">
+                <h3 class="section-title">Your Information</h3>
+                <div class="form-group">
+                  <label for="clientName">Full Name</label>
+                  <input 
+                    type="text" 
+                    id="clientName" 
+                    name="client_name" 
+                    placeholder="Your full name" 
+                    required 
+                    class="form-input"
+                  />
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="clientEmail">Email Address</label>
+                    <input 
+                      type="email" 
+                      id="clientEmail" 
+                      name="client_email" 
+                      placeholder="your.email@example.com" 
+                      required 
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="clientPhone">Phone Number (Optional)</label>
+                    <input 
+                      type="tel" 
+                      id="clientPhone" 
+                      name="client_phone" 
+                      placeholder="+254712345678" 
+                      class="form-input"
+                    />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="notes">Additional Notes (Optional)</label>
+                  <textarea 
+                    id="notes" 
+                    name="notes" 
+                    placeholder="Any special requests, allergies, or preferences..." 
+                    rows="3"
+                    class="form-input"
+                  ></textarea>
+                </div>
+              </div>
+
+              <!-- Form Actions -->
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large" id="submitBtn">
+                  <span class="btn-text">Book Appointment</span>
+                  <span class="btn-loading" style="display: none;">
+                    <div class="loading-spinner small"></div>
+                    Booking...
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <!-- Success Modal -->
+  <div id="successModal" class="modal" style="display: none;">
+    <div class="modal-content success-modal">
+      <div class="success-icon">✅</div>
+      <h2>Booking Confirmed!</h2>
+      <p>Your appointment has been successfully booked.</p>
+      <div id="bookingDetails" class="booking-summary">
+        <!-- Booking details will be populated here -->
+      </div>
+      <div class="modal-actions">
+        <button onclick="closeSuccessModal()" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Modal -->
+  <div id="errorModal" class="modal" style="display: none;">
+    <div class="modal-content error-modal">
+      <div class="error-icon">❌</div>
+      <h2>Booking Failed</h2>
+      <p id="errorMessage">Something went wrong. Please try again.</p>
+      <div class="modal-actions">
+        <button onclick="closeErrorModal()" class="btn btn-primary">Try Again</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/frontend/js/booking.js"></script>
+</body>
+</html>
